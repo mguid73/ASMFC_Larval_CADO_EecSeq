@@ -1,19 +1,22 @@
 # Demultiplexing Chapter 1 & 2 Larval EecSeq data
 
+**TO-DO:**
+- make sample file with barcodes info
+
 **QUESTIONS FOR JON:**
 - I thought these data were beind demultiplexed by novogene per emails in October?
-- Where on KITT to do demultiplexing? In a RAID STORAGE and not home/?
-- Use STACKS ??
-- review plan below! is there a more streamlined way to do this? how long does it take?
-    - how do I incorporate the adapters too??
+- to be conscious of space on KITT - Where on KITT to do demultiplexing? In RAID STORAGE (which one?) and not home/? 
+    - write access in RAID STORAGE?
+
+- Use [STACKS](https://github.com/amyzyck/EecSeq_NB_EasternOyster/blob/master/Analysis/Analysis_Part1/EecSeq_Cvirginica_dDocent.md) or [dDocent_demux](https://github.com/jpuritz/dDocent_demux)???
+- review plan below! 
+    - sample file and run script for each index pair??? or can I give it 1 sample file and use *_1.fq.gz and *_2.fq.gz as inputs??
+    - how do I incorporate the adapters - if using stacks? 
+    - q: inline barcodes for dDocent_demux ?
 
 Before proceeding with analysis reads will have to be demultiplexed, meaning assigning sample specific reads using the index pairs assigned at library prep and pooling steps.  
 
 Multiplexed files are located in `/RAID_STORAGE2/Raw_Data/ASMFC_EECSEQ/01.RawData`
-
-```{bash}
-ll
-```
 
 ```
 drwxr-xr-x 2 root root 4096 Oct  7 05:18 i506_i706
@@ -71,9 +74,34 @@ Inside of each of these files is set of fwd and rev read fastq files labeled wit
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_1.fq.gz
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_2.fq.gz
 
-## Demultiplexing with [STACKS](https://catchenlab.life.illinois.edu/stacks/):
+
+## Demultiplexing with [`dDocent_demux`](https://github.com/jpuritz/dDocent_demux)
+Run from `/home/mguidry/1_Larval-CADO/` on KITT
+
+### Download script and make executable
+```
+chmod +x dDocent_demux.txt
+```
+
+### Construct sample file for each index pair
+The script automatically detects the demultiplexing mode based on column headers in the tab-delimited sample file. Here, I made a file with the sample name, header indices (i7/i5) and the inline barcode (+reverse compliment???)
+
+### Run script
+**RUN FOR EACH INDEX PAIR** (for my data 20X)?
+
+```
+dDocent_demux -r1 <R1.fastq.gz> -r2 <R2.fastq.gz> -s <samples.txt> -o demux
+```
+
+
+
+
+
+
+## Demultiplexing with [`STACKS`](https://catchenlab.life.illinois.edu/stacks/):
 
 ### Make barcode files for each library
+Each library needs a separate barcodes file in txt format
 
 ### Turning barcode files into a list of barcodes
 
@@ -85,6 +113,10 @@ Inside of each of these files is set of fwd and rev read fastq files labeled wit
 
 ### Use the function `process_shortreads` to demultiplex each file
 Program options can be found [here](https://catchenlab.life.illinois.edu/stacks/comp/process_shortreads.php)
+
+```
+process_shortreads -1 D501_R1_001.fastq.gz -2 D501_R2_001.fastq.gz -b barcodes_A -r -i gzfastq -o /RAID_STORAGE2/mguidry/ASMFC_
+```
 
 ## Library outputs
 
