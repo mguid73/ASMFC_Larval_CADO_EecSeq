@@ -49,11 +49,13 @@ drwxr-xr-x 2 root root 4096 Oct  7 05:17 Undetermined
 
 Captured libraries are in the i50#_i70# directories. 
 
-Unfortunately a good amount of probes remained in the pools and were sequenced as well - these are labeled with "Probes_".
+Unfortunately a good amount of probes remained in the pools and were sequenced as well. Fortunately, the probe libraries were constructed with distinct indices that were not used in the gDNA captured libraries. Sequenced probes are in the multiplexed folders labeled "Probes_".
 The Undetermined directory contains reads that could not be resolved into either captured library indices or probe indicies.
 
 > **Note!** The 710 probe files need to be renamed with 702. They were mislabeled in the table sent to novogene upon discovery of the unexpected probes in the sequencing run. 
 
+
+For now, I will only demultiplex and focus on the captured libraries. 
 Each of the captured library files (ex. i506_i706) contains 4-5 samples. These are identified down to the sample with the addition of an adapter sequence. 
 
 Inside of each of these files is set of fwd and rev read fastq files labeled with 1 and 2 to indicate the read. 
@@ -62,6 +64,12 @@ Inside of each of these files is set of fwd and rev read fastq files labeled wit
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_1.fq.gz
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_2.fq.gz
 
+### Download script to working directoryy and make executable
+```
+cd /RAID_STORAGE3/mguidry/
+mv ../home/mguidry/1_Larval_CADO/dDocent_demux.txt .
+chmod +x dDocent_demux.txt
+```
 
 ## Demultiplexing with [`dDocent_demux`](https://github.com/jpuritz/dDocent_demux)
 Run from `/RAID_STORAGE3/mguidry/` on KITT
@@ -69,19 +77,21 @@ Run from `/RAID_STORAGE3/mguidry/` on KITT
 ```
 #link in fq.gz files from RAID_STORAGE2 
 
-#ensure sample file for each i7;i5 index pair is there
 
-#
 ```
 
-### Download script and make executable
-```
-chmod +x dDocent_demux.txt
-```
+
 
 ### Construct sample file for each index pair
 The script automatically detects the demultiplexing mode based on column headers in the tab-delimited sample file. Here, I made a file with the sample name & inline barcode as the data is already split up by index (i7;i5) pairs. 
 
+```
+#ensure sample info files is present 
+
+
+#look at example strucutre of sample info
+
+```
 
 ### Run script
 **RUN FOR EACH INDEX PAIR**
@@ -106,4 +116,3 @@ done
 ## Post-demultiplexing quality check
 
 ### Run `fastqc` then `multiqc` for report
-
