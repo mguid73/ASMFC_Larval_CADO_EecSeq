@@ -5,14 +5,21 @@
 
 **QUESTIONS FOR JON:**
 - I thought these data were beind demultiplexed by novogene per emails in October?
+- run qc before *and* after demultiplexing? Whats the benefit of running before? just overall seq quality?
 - to be conscious of space on KITT - Where on KITT to do demultiplexing? In RAID STORAGE (which one?) and not home/? 
     - write access in RAID STORAGE?
 
-- Use [STACKS](https://github.com/amyzyck/EecSeq_NB_EasternOyster/blob/master/Analysis/Analysis_Part1/EecSeq_Cvirginica_dDocent.md) or [dDocent_demux](https://github.com/jpuritz/dDocent_demux)???
+- Using Amy's [STACKS](https://github.com/amyzyck/EecSeq_NB_EasternOyster/blob/master/Analysis/Analysis_Part1/EecSeq_Cvirginica_dDocent.md) pipeline or [dDocent_demux](https://github.com/jpuritz/dDocent_demux)???
 - review plan below! 
     - sample file and run script for each index pair??? or can I give it 1 sample file and use *_1.fq.gz and *_2.fq.gz as inputs??
-    - how do I incorporate the adapters - if using stacks? 
-    - q: inline barcodes for dDocent_demux ?
+    - y-inline a and b adapter seqs become adapter_1 and adapter_2 - if using stacks? 
+    - q: y-inline barcodes for dDocent_demux - double check that I'm using the right sheet and pulling the right seq.
+        - Barcode_R1 = y-inline a
+        - Barcode_R2 = y-inline b
+        - pull ***inline barcode*** column?? for y-inline??
+        - pull ***Barcode Index*** column for i7;i5?? which one (2500 or 4000)?
+
+_________________________________________________________
 
 Before proceeding with analysis reads will have to be demultiplexed, meaning assigning sample specific reads using the index pairs assigned at library prep and pooling steps.  
 
@@ -61,6 +68,7 @@ drwxr-xr-x 2 root root 4096 Oct  7 05:17 Undetermined
 ```
 
 Captured libraries are in the i50#_i70# directories. 
+
 Unfortunately a good amount of probes remained in the pools and were sequenced as well - these are labeled with "Probes_".
 The Undetermined directory contains reads that could not be resolved into either captured library indices or probe indicies.
 
@@ -86,17 +94,18 @@ chmod +x dDocent_demux.txt
 ### Construct sample file for each index pair
 The script automatically detects the demultiplexing mode based on column headers in the tab-delimited sample file. Here, I made a file with the sample name, header indices (i7/i5) and the inline barcode (+reverse compliment???)
 
+
 ### Run script
-**RUN FOR EACH INDEX PAIR** (for my data 20X)?
+**RUN FOR EACH INDEX PAIR** (for my data run it 20x)?
 
 ```
 dDocent_demux -r1 <R1.fastq.gz> -r2 <R2.fastq.gz> -s <samples.txt> -o demux
 ```
 
+________________________________________________________________________________
 
 
-
-
+________________________________________________________________________________
 
 ## Demultiplexing with [`STACKS`](https://catchenlab.life.illinois.edu/stacks/):
 
