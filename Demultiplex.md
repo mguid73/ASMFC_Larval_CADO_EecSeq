@@ -1,4 +1,26 @@
 # Demultiplexing Chapter 1 & 2 Larval EecSeq data
+
+Easy Guide to tmux
+
+```
+#create a new session and run desired command
+tmux new -s my_session
+your_command
+
+#to detach from the session and have things run in the background
+Ctrl + b, then d 
+##or type
+tmux detach
+
+#list tmux sessions
+tmux ls
+
+#reattach to session
+tmux attach -t my_session
+
+#kill session (if needed)
+tmux kill-session -t my_session
+```
 _________________________________________________________
 
 Before proceeding with analysis reads will have to be demultiplexed, meaning assigning sample specific reads using the index pairs assigned at library prep and pooling steps. After demultiplexing, I'll do some QC with fastqc/multiqc.
@@ -55,16 +77,16 @@ The Undetermined directory contains reads that could not be resolved into either
 > **Note!** The 710 probe files need to be renamed with 702. They were mislabeled in the table sent to novogene upon discovery of the unexpected probes in the sequencing run. 
 
 
-For now, I will only demultiplex and focus on the captured libraries. 
+For now, I will only demultiplex and focus on the **captured libraries**. 
 Each of the captured library files (ex. i506_i706) contains 4-5 samples. These are identified down to the sample with the addition of an adapter sequence. 
 
-Inside of each of these files is set of fwd and rev read fastq files labeled with 1 and 2 to indicate the read. 
+Inside of each of these directories is set of fwd and rev read fastq files labeled with 1 and 2 to indicate the read. I will run demultiplexing on each one of these directories with the adapter info to parse out fastq data by sample. 
 
 > for example: 
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_1.fq.gz
 > i506_i706_WKDL250004555-1A_22W7JGLT4_L7_2.fq.gz
 
-### Download script to working directoryy and make executable
+### Download script to working directory and make executable
 ```
 cd /RAID_STORAGE3/mguidry/
 mv ../home/mguidry/1_Larval_CADO/dDocent_demux.txt .
@@ -72,36 +94,225 @@ chmod +x dDocent_demux.txt
 ```
 
 ## Demultiplexing with [`dDocent_demux`](https://github.com/jpuritz/dDocent_demux)
-Run from `/RAID_STORAGE3/mguidry/` on KITT
-
-```
-#link in fq.gz files from RAID_STORAGE2 
-
-
-```
-
-
+Running from `/RAID_STORAGE3/mguidry/` on KITT
 
 ### Construct sample file for each index pair
-The script automatically detects the demultiplexing mode based on column headers in the tab-delimited sample file. Here, I made a file with the sample name & inline barcode as the data is already split up by index (i7;i5) pairs. 
+The script automatically detects the demultiplexing mode based on column headers in the tab-delimited sample file. Here, I made files with the sample name & inline adapter barcode for each index (i7;i5) pair. 
+
+To construct those files, I followed the following steps:
+
+Assign adapter seq (barcode) to sample_ID
+```
+awk -F'\t' 'NR==FNR {if (FNR>1) b[$1]=$2; next} 
+FNR==1 {print $0 "\tBARCODE"; next} 
+{print $0 "\t" b[$3]}' \
+adapter_barcodes.txt all_samples_demux.txt \
+> all_samples_demux_with_barcodes.txt
+```
+
+Check that all barcodes were pulled correctly
+```
+awk -F'\t' '
+NR==FNR {
+    if (FNR>1) ref[$1]=$2
+    next
+}
+FNR==1 {
+    for (i=1; i<=NF; i++) {
+        if ($i=="Adapter") adapter_col=i
+        if ($i=="BARCODE") barcode_col=i
+    }
+    next
+}
+{
+    adapter=$adapter_col
+    observed=$barcode_col
+    expected=ref[adapter]
+
+    if (observed != expected) {
+        print "Mismatch on line " FNR ": Adapter=" adapter \
+              " Expected=" expected \
+              " Observed=" observed
+        mismatch=1
+    }
+}
+END {
+    if (!mismatch)
+        print "All adapter-barcode pairs match reference table ✔"
+}
+' adapter_barcodes.txt all_samples_demux_with_barcodes.txt
+```
+
+Split table into index pair sample files
+```
+awk -F'\t' '
+FNR==1 {
+    for (i=1; i<=NF; i++) {
+        if ($i=="Index_pairs") idx_col=i
+    }
+    header=$0
+    next
+}
+{
+    pair=$idx_col
+    gsub(";", "_", pair)
+    file=pair "_samples.txt"
+
+    if (!(file in seen)) {
+        print header > file
+        seen[file]=1
+    }
+    print >> file
+}
+' all_samples_demux_with_barcodes.txt
+```
+
+Clean up files to only have Sample_ID and BARCODE columns
+```
+mkdir ../cleaned_sample_info
+
+for f in *_samples.txt; do
+  awk -F'\t' '
+  FNR==1 {
+      for (i=1; i<=NF; i++) {
+          if ($i=="Sample_ID") sid=i
+          if ($i=="BARCODE") bc=i
+      }
+      print "Sample_ID\tBARCODE"
+      next
+  }
+  { print $sid "\t" $bc }
+  ' "$f" > ../cleaned_sample_info/"$f"
+done
+```
 
 ```
-#ensure sample info files is present 
+cd ../cleaned_sample_info 
+ls | wc -l #should have 20 files (I removed the _samples.txt file with the header info from original big table)
+```
 
 
-#look at example strucutre of sample info
+Rename BARCODE to Barcode_R1 and duplicate it to make Barcode_R2 column too 
+```
+for f in *_samples.txt; do
+  awk -F'\t' 'BEGIN{OFS="\t"}
+  FNR==1 {
+      print "Sample_ID","Barcode_R1","Barcode_R2"
+      next
+  }
+  {
+      print $1,$2,$2
+  }' "$f" > tmp && mv tmp "$f"
+done
+```
 
+Check spacing and formating
+```
+head 506_706_samples.txt | cat -A
+```
+```
+for f in *_samples.txt; do
+  awk '
+  NF != 3 {
+      print "Column count issue in", FILENAME, "line", NR, "- has", NF, "columns"
+      bad=1
+  }
+  END {
+      if (!bad)
+          print FILENAME, "OK"
+  }' "$f"
+done
+```
+
+Little bit of bug fixing
+```
+#fix issue with tab delimiters in _sample.txt files
+tr -d '\r' < 506_706_samples.txt > 506_706_samples_fixed.txt
+
+#check to make sure all ^M occurances are gone!
+cat -A 506_706_samples_fixed.txt | head
+
+#Confirm field structure (should return 3)
+awk -F'\t' '{print NF}' 506_706_samples_fixed.txt | sort -nu
+```
+
+example structure of sample info
+```
+(base) head 506_706_samples.txt 
+Sample_ID       Barcode_R1      Barcode_R2
+ARC2_CB1ATCACG  ATCACG
+NEH2_T0_TGGCCA  TGGCCA
+MV3_SB2 ACAGTG
+MV3_T0_2        CTTGCA  CTTGCA
+MV3_STR_GATCAG  GATCAG
+```
+
+### Set up directory for each set of index pair fastq files
+```
+#move sample info files to appropriate directories - do this for each index pair
+mkdir 506_706
+cd 506_706/
+cp cleaned_sample_info/506_706_samples.txt 
+
+#link in fastq files 
+ln -s /RAID_STORAGE2/Raw_Data/ASMFC_EECSEQ/01.RawData/i506_i706/*.fq.gz .
 ```
 
 ### Run script
 **RUN FOR EACH INDEX PAIR**
-
 ```
+#start new tmux session and activate conda environment
+tmux new -s demux
+conda activate larvae
+```
+```
+#run dDocent_demux
 dDocent_demux -r1 <R1.fastq.gz> -r2 <R2.fastq.gz> -s <samples.txt> -o demux
 ```
+|----------------------------|-----------------------------|----------------------------|
+|----------------------------|-----------------------------|----------------------------|
+|✅ 506_706 - started 2:00pm | ✅ 508_706 - started 9:20am | ✅ 509_706 - started 4:43pm|
+|✅ 506_707 - started 6:30pm | ✅ 508_707 - started 9:30am | ✅ 509_707 - started 4:46pm|
+|✅ 506_708 - started 6:42pm | ✅ 508_708 - started 9:40am | ✅ 509_708 - started 4:51pm|
+|✅ 506_712 - started 6:55pm | ✅ 508_712 - started 9:50am | ✅ 509_712 - started 4:56pm|
+|----------------------------|-----------------------------|
+|✅ 511_706 - started 5:45pm | ✅ 512_706 - started 9:36pm |
+|✅ 511_707 - started 5:52pm | ✅ 512_707 - started 9:41pm |
+|✅ 511_708 - started 5:55pm | ✅ 512_708 - started 9:46pm |
+|❌ 511_712 - started 6:00pm | ✅ 512_712 - started 9:53pm |
+|----------------------------|-----------------------------|
 
+### Move sample fastqc files to one directory
+Check files in the index-pair folders & move sample fastq files into one central folder
+
+> NOTE:
+> I identified some messiness here (of my own making). I have two sets of Vibrio samples (with duplicate sample names) that were captured with different probe sets. 
+>
+> Thankfully, they have distinct indexing and adapters so identifying them is not the issue, however fastq files will have to be renamed so I can differentiate between them!!
+> 
+> Vibrio samples in Vibrio_1 and Vibrio_2 (pools 8&9) were captured with larval CADO AND Vibrio probe sets. 
+> 
+> Vibrio samples in Vibrio_3 and Vibrio_4 (pools 10&11) were only captured with Vibrio probe sets. 
+> 
+> Thus, samples from Vibrio_1 and _2 are named with _CombinedProbed
+> 
+> And samples from Vibrio_3 and _4 are named with _VibrioProbed
+
+**WAITING FOR 10 FILES TO BE DEMULTIPLEXED from 511_712**
+
+| Chapter & Experiment       | Population |  Number of samples          | Number of fastq (Fwd/Rev)  | Check |
+|----------------------------|------------|-----------------------------|----------------------------|-------|
+|  CH 1 - Larval CADO        |    ARC2    |              9              |           16               |   🟡  |
+|  CH 1 - Larval CADO        |    NEH1    |              9              |           16               |   🟡  |
+|  CH 1 - Larval CADO        |    NEH2    |              9              |           18               |   ✅  |
+|  CH 1 - Larval CADO        |    NEH3    |              9              |           18               |   ✅  |
+|  CH 1 - Larval CADO        |    MV1     |              9              |           16               |   🟡  |
+|  CH 1 - Larval CADO        |    MV2     |              9              |           18               |   ✅  |
+|  CH 1 - Larval CADO        |    MV3     |              9              |           18               |   ✅  |
+|  CH 2 - Vibrio (Combined)  |    MV3     |              14             |           26               |   🟡  |
+|  CH 2 - Vibrio (Vibrio)    |    MV3     |              14             |           26               |   🟡  |
 ________________________________________________________________________________
-> There should be 182 files total: 91 samples x 2 reads/sample
+There should be 182 files total: 91 samples x 2 reads/sample
 
 ### Count raw reads for each file
 ```{bash}
@@ -112,7 +323,3 @@ zcat $fq | echo $((`wc -l`/4))
 done
 ```
 
-
-## Post-demultiplexing quality check
-
-### Run `fastqc` then `multiqc` for report
