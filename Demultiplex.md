@@ -279,7 +279,7 @@ dDocent_demux -r1 <R1.fastq.gz> -r2 <R2.fastq.gz> -s <samples.txt> -o demux
 |✅ 511_706 - started 5:45pm | ✅ 512_706 - started 9:36pm |
 |✅ 511_707 - started 5:52pm | ✅ 512_707 - started 9:41pm |
 |✅ 511_708 - started 5:55pm | ✅ 512_708 - started 9:46pm |
-|❌ 511_712 - started 6:00pm | ✅ 512_712 - started 9:53pm |
+|✅ 511_712 - started 6:00pm | ✅ 512_712 - started 9:53pm |
 |----------------------------|-----------------------------|
 
 ### Move sample fastqc files to one directory
@@ -297,24 +297,33 @@ Check files in the index-pair folders & move sample fastq files into one central
 > Thus, samples from Vibrio_1 and _2 are named with _CombinedProbed
 > 
 > And samples from Vibrio_3 and _4 are named with _VibrioProbed
-
-**WAITING FOR 10 FILES TO BE DEMULTIPLEXED from 511_712**
+> 
+> Samples in 511_712 index pair directory had to be re-demultiplexed after renaming the vibrio samples due this oversight
+> 
+> Thus, `/RAIDSTORAGE3/mguidry/511_712_take2` directory contains the correct Vibrio sample reads properly named.
 
 | Chapter & Experiment       | Population |  Number of samples          | Number of fastq (Fwd/Rev)  | Check |
 |----------------------------|------------|-----------------------------|----------------------------|-------|
-|  CH 1 - Larval CADO        |    ARC2    |              9              |           16               |   🟡  |
-|  CH 1 - Larval CADO        |    NEH1    |              9              |           16               |   🟡  |
+|  CH 1 - Larval CADO        |    ARC2    |              9              |           18               |   ✅  |
+|  CH 1 - Larval CADO        |    NEH1    |              9              |           18               |   ✅  |
 |  CH 1 - Larval CADO        |    NEH2    |              9              |           18               |   ✅  |
 |  CH 1 - Larval CADO        |    NEH3    |              9              |           18               |   ✅  |
-|  CH 1 - Larval CADO        |    MV1     |              9              |           16               |   🟡  |
+|  CH 1 - Larval CADO        |    MV1     |              9              |           18               |   ✅  |
 |  CH 1 - Larval CADO        |    MV2     |              9              |           18               |   ✅  |
 |  CH 1 - Larval CADO        |    MV3     |              9              |           18               |   ✅  |
-|  CH 2 - Vibrio (Combined)  |    MV3     |              14             |           26               |   🟡  |
-|  CH 2 - Vibrio (Vibrio)    |    MV3     |              14             |           26               |   🟡  |
+|  CH 2 - Vibrio (Combined)  |    MV3     |              14             |           28               |   ✅  |
+|  CH 2 - Vibrio (Vibrio)    |    MV3     |              14             |           28               |   ✅  |
 ________________________________________________________________________________
-There should be 182 files total: 91 samples x 2 reads/sample
+There are 182 fastq files total: 91 samples x 2 reads per sample.
 
-### Count raw reads for each file
+*Total CH 1 - Larval CADO files = **126***
+
+*Total CH 2 - Vibrio files = **56***
+
+**ALL FILES ARE THERE!** ✅
+
+
+### Count raw reads for each file - optional
 ```{bash}
 for fq in *.fq.gz
 do
@@ -322,4 +331,3 @@ echo $fq
 zcat $fq | echo $((`wc -l`/4))
 done
 ```
-

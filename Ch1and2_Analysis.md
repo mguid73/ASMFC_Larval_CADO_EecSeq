@@ -54,11 +54,11 @@ tmux kill-session -t my_session
 -------
 ## Steps:
 
-1. Demultiplexing
-2. Set up 
-3. Raw read QC
-4. Trimming with fastp
-5. Trimmed read QC
+1. 
+2. 
+3. 
+4. 
+5. 
 6. 
 7. 
 8. 
@@ -109,6 +109,108 @@ conda activate larvae
 ## 1. Demultiplexing 
 *see [Demultiplex.md](/Demultiplex.md) for details*
 
-## 2. Raw MultiQC report
+Demultiplexed in `RAIDSTORAGE3`
 
-## 3. Trimming reads
+```
+mkdir /home/mguidry/1_Larval-CADO/raw_seq
+cd raw_seq
+# link demultiplexed fastq files
+ln -s /RAID_STORAGE3/mguidry/demux_fastq/*fastq.gz .
+ls -1 | wc -l  #output: 182 (yay!)
+```
+
+## 2. Raw reads FastQC & MultiQC report
+
+### FastQC
+FastQC is a program designed to visualize the quality of high throughput sequencing datasets. The report will highlight any areas where the data looks unusual or unreliable.
+```
+mkdir /home/mguidry/1_Larval-CADO/fastqc_raw
+cd fastqc_raw
+
+#run the following in tmux session - used two (one for FWD and one for REV)
+
+conda activate larvae
+cd raw_seq
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*F.fastq.gz #11AM start
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*R.fastq.gz #11AM start
+
+# check progress
+ls -1 | wc -l 
+
+# total number of fastqc files expected = 364
+# will have an html and zip file for each sample
+# 182 samples * 2 fastqc files per sample = 364
+```
+
+### Multiqc report
+Ran multiqc to generate a readable report to investigate the quality of the sequence data. Ran in the directory with the fastqc output files.
+
+```
+conda activate larvae
+cd fastqc_raw
+multiqc .
+```
+
+The multiqc command generates multiqc_data directory and multiqc_report.html. The .html report file can be transferred to local computer or to github and visualized on a web browser.
+
+**REVIEW MULTIQC REPORT HERE!!!**
+
+
+## 3. Trimming raw reads, mapping to reference genome, and SNP calling with dDocent
+
+NEXT STEPS:
+- update raw read names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)!!
+- make config file for dDocent
+- trim raw reads, mapping, and SNP calling with dDocent  
+	- no to assembly bc we have a reference genome 👍🏻
+- SNP filtering (once I have the VCF)*
+- ANALYSIS! Yay!
+
+**QUESTIONS FOR JON:** 
+- Look at read quality 
+- Should I run trimming, mapping and SNP calling all in one dDocent run? or is there a reason to do it step-wise?
+- Should I first test mapping on a subset first to optimize? or just go for it with default BWA parameters? 
+	- optimizing with samtools flagstats
+- VCF Filtering - use the `TotalRawSNPs.vcf` *NOT* `Final.recode.vcf`?? 
+	- `Final.recode.vcf` is more useful for comparing different pipeline runs
+	- but it is also a filtered snp data set?? 
+	- i am confused about the difference between these two VCFs
+- **FILL IN QUESTIONS ON VCF FILTERING!!**
+- Compressed filtered VCF (*.vcf.gz) is what I'll use for PCAdapt and other analyses yes??
+- ANALYSES!
+	- PCA for a first look
+	- FILL THIS IN TOO!!
+
+
+
+Trimming with dDocent vs. trimming outside of dDocent. Since data looks relatively good and we don't have any nonstandard concerns, we can proceed with trimming in dDocent just to make it as straightforward as possible.
+
+[dDocent](https://ddocent.com/quick/) website with more info!
+
+```
+cd Shared_Data/ROD_CADO
+conda activate ROD_CADO
+mkdir analysis
+cd analysis
+ln -s ../dDocent_ngs .  #link dDocent file into this new analysis directory
+ln -s ../raw_seq/*.fq.gz #link raw seq files into analysis directory
+ln -s ~/eager_obj1b/Genome/masked.* refernce.fasta #link new haplotig masked genome into directory and name it reference.fasta (from JMG previous directory)
+#nano config.file #dDocent always needs a `config.file` to run with instructions on how to complete the run -OR- you can do interactive prompts (we did interactive prompts) 
+./dDocent_ngs
+
+# prompts below come up
+processors: 48
+trim?: yes
+perform assembly?: no
+map reads? yes
+new parameters for BWA? no 
+call SNPS? no
+enter email # this will run a while!
+ctrl+z 
+bg
+disown -h 
+top #shows you programs running currently - press q to leave
+tail temp.LOG #shows you progress of read trimming
+```
+
+dDocent was set to trim (take off bad basepairs) and map with default bwa mem parameters. Mapped reads were then marked for duplicated with picard then samtools was used to filter out duplicated and select for reads with a mapping quality above 10
