@@ -131,8 +131,8 @@ cd fastqc_raw
 
 conda activate larvae
 cd raw_seq
-fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*F.fastq.gz #11AM start
-fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*R.fastq.gz #11AM start
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*F.fastq.gz #11AM start - 4:30PM end
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_raw/ ./*R.fastq.gz #11AM start - 4:30PM end
 
 # check progress
 ls -1 | wc -l 
@@ -149,11 +149,23 @@ Ran multiqc to generate a readable report to investigate the quality of the sequ
 conda activate larvae
 cd fastqc_raw
 multiqc .
+
+cd multiqc_data
 ```
 
 The multiqc command generates multiqc_data directory and multiqc_report.html. The .html report file can be transferred to local computer or to github and visualized on a web browser.
 
 **REVIEW MULTIQC REPORT HERE!!!**
+
+At first glance, things look pretty good!
+
+Highest depth of unique reads ~20M
+
+NEH2_SB1 has the lowest unique reads ~5M, but is an annomaly.
+
+Most sequence files are falling between 10-20M unique reads.
+
+Quality scores & per base sequence content look good!
 
 
 ## 3. Trimming raw reads, mapping to reference genome, and SNP calling with dDocent
@@ -163,54 +175,50 @@ NEXT STEPS:
 - make config file for dDocent
 - trim raw reads, mapping, and SNP calling with dDocent  
 	- no to assembly bc we have a reference genome 👍🏻
-- SNP filtering (once I have the VCF)*
-- ANALYSIS! Yay!
+- SNP filtering
+- ANALYSES! Yay!!
 
-**QUESTIONS FOR JON:** 
-- Look at read quality 
+**QUESTIONS, CLARIFICATIONS, and VERBAL PROCESSING with JON:** 
+
+- [Amy's md](https://github.com/amyzyck/RISG_LarvalCADO/blob/main/Analysis/RISG_Larval_Exposure_dDocent_SNPFiltering.md#read-trimming-mapping-and-snp-calling): "Jon downloaded a version of dDocent on my KITT account dDocent_ngs that can be used for Expressed Exome Capture Sequencing (EecSeq) and pooled samples (larval pools). It is located in the RISG_Larval directory"
+
+- Look at read quality & confirm how dDocent will trim these up for me? 
+
+- When to split data into Ch 1 & Ch 2?? 
+	- at VCF filtering?
+
 - Should I run trimming, mapping and SNP calling all in one dDocent run? or is there a reason to do it step-wise?
+
 - Should I first test mapping on a subset first to optimize? or just go for it with default BWA parameters? 
-	- optimizing with samtools flagstats
+	- optimizing with samtools flagstats?
+
 - VCF Filtering - use the `TotalRawSNPs.vcf` *NOT* `Final.recode.vcf`?? 
 	- `Final.recode.vcf` is more useful for comparing different pipeline runs
 	- but it is also a filtered snp data set?? 
 	- i am confused about the difference between these two VCFs
-- **FILL IN QUESTIONS ON VCF FILTERING!!**
+
+- [Amy's pooled larvae variant filtering steps](https://github.com/amyzyck/RISG_LarvalCADO/blob/main/Analysis/RISG_Larval_Exposure_dDocent_SNPFiltering.md#variant-filtering)
+	- use this workflow as reference?
+	- there's step where she splits into block-specific VCFs
+	- should I split into population VCFs 
+	- AND a VCF for each probe set for Vibrio (reminder! two datasets: Vibrio only and Vibrio+CADO captured)
+
 - Compressed filtered VCF (*.vcf.gz) is what I'll use for PCAdapt and other analyses yes??
-- ANALYSES!
-	- PCA for a first look
-	- FILL THIS IN TOO!!
+
+- ANALYSES! - what should I prioritze?
+	- PCAdapt for a first look
+	- Outlier detection (PCAdapt, OutFlank, LFMM)
+	- Diversity metrics (Nucleotide diversity, Tajima's D, Fst)
+
+- how to slice up and compare data? 
+
+	- CH 1 ARC, NEH, MV (CON v STR w/in each)
+		- treatment comparisons w/in populations 
+		- no hard statistical comparisons between populations (at least for now)
+
+	- CH 2 Vibrio (CC, CS, VC, VS) & different probe sets (treat probe sets as diff groups??)
+		- treatment comparisons w/in dataset
+		- if I had to chose one dataset (for sake of time) - CADO+Vibrio probe??
 
 
-
-Trimming with dDocent vs. trimming outside of dDocent. Since data looks relatively good and we don't have any nonstandard concerns, we can proceed with trimming in dDocent just to make it as straightforward as possible.
-
-[dDocent](https://ddocent.com/quick/) website with more info!
-
-```
-cd Shared_Data/ROD_CADO
-conda activate ROD_CADO
-mkdir analysis
-cd analysis
-ln -s ../dDocent_ngs .  #link dDocent file into this new analysis directory
-ln -s ../raw_seq/*.fq.gz #link raw seq files into analysis directory
-ln -s ~/eager_obj1b/Genome/masked.* refernce.fasta #link new haplotig masked genome into directory and name it reference.fasta (from JMG previous directory)
-#nano config.file #dDocent always needs a `config.file` to run with instructions on how to complete the run -OR- you can do interactive prompts (we did interactive prompts) 
-./dDocent_ngs
-
-# prompts below come up
-processors: 48
-trim?: yes
-perform assembly?: no
-map reads? yes
-new parameters for BWA? no 
-call SNPS? no
-enter email # this will run a while!
-ctrl+z 
-bg
-disown -h 
-top #shows you programs running currently - press q to leave
-tail temp.LOG #shows you progress of read trimming
-```
-
-dDocent was set to trim (take off bad basepairs) and map with default bwa mem parameters. Mapped reads were then marked for duplicated with picard then samtools was used to filter out duplicated and select for reads with a mapping quality above 10
+_________________________________________________________
