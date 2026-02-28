@@ -155,7 +155,6 @@ cd multiqc_data
 
 The multiqc command generates multiqc_data directory and multiqc_report.html. The .html report file can be transferred to local computer or to github and visualized on a web browser.
 
-**REVIEW MULTIQC REPORT HERE!!!**
 
 At first glance, things look pretty good!
 
@@ -168,57 +167,164 @@ Most sequence files are falling between 10-20M unique reads.
 Quality scores & per base sequence content look good!
 
 
-## 3. Trimming raw reads, mapping to reference genome, and SNP calling with dDocent
+## 3. Trimming raw reads, mapping to reference genome, and SNP calling with [dDocent](https://ddocent.com)
+
+### renaming files 
+Update fastq names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)
+
+Here's bash code to rename those files by removing the second underscore:
+```bash
+for f in *TV0*.fastq.gz; do
+    new_name=$(echo "$f" | sed 's/\(.*_.*\)_/\1/')
+    mv "$f" "$new_name"
+done
+```
+
+This renames files like so:
+
+- `NEH1_T0_1.F.fastq.gz` → `NEH1_T01.F.fastq.gz`
+- `NEH2_T0_3.R.fastq.gz` → `NEH2_T03.R.fastq.gz`
+
+To **test first without renaming**, swap `mv` for `echo`:
+```bash
+for f in *TVE*.fastq.gz; do
+    new_name=$(echo "$f" | sed 's/\(.*_.*\)_/\1/')
+    echo "$f" → "$new_name"
+done
+```
+
+Simplify the Vibrio sample names by removing "Probed"
+```
+for f in *Probed*.fastq.gz; do
+    new_name=$(echo "$f" | sed 's/Probed//')
+    mv "$f" "$new_name"
+done
+```
+
+Check for samples with more than 1 underscore
+```
+for f in *.gz; do
+    count=$(echo "$f" | tr -cd '_' | wc -c)
+    if [ "$count" -ne 1 ]; then
+        echo "$f has $count underscores"
+    fi
+done
+```
+This didn't return anything, so all of my sample names should be good!
+
+One last thing, for uniformity, I want to change the file extension to .fq.gz instead of .fastq.gz
+```
+for f in *.fastq.gz; do
+    new_name=$(echo "$f" | sed 's/\.fastq\.gz$/.fq.gz/')
+    mv "$f" "$new_name"
+done
+```
+
+### download dDocent file specific to EecSeq + pooled samples
+There is a new version of dDocent specific to EecSeq and pooled samples `dDocent_ngs_3.2`. I downloaded from Amy's [RISG_LarvalCADO]((https://github.com/amyzyck/RISG_LarvalCADO/tree/main/Scripts)) repo, and have it stored in `/home/mguidry/1_Larval-CADO/Scripts` on KITT.
+
+### Setting up 
+
+Activate conda env (from earlier) with dDocent installed
+
+```
+conda activate larvae
+conda list #check all installed packages
+```
+
+Make directory for dDocent and link files plus `dDocent_ngs_3.2` file in 
+```
+mkdir Larval_ddocent
+cd Larval_ddocent/
+
+#link files
+ln -s ../raw_seq/*.fq.gz .
+ls -1 | wc -l  #check to make sure we have all 182 files!
+
+# link in dDocent 
+ln -s ../Scripts/dDocent_ngs_3.2 .
+
+# link in reference genome
+ln -s /home/Genomic_Resources/C_virginica/reference.fasta .
+```
+
+### Running dDocent for trimming, mapping and SNP calling
+- Testing values for match score, mismatch score, and gap penalty for read mapping (A = 2, B = 4, and O = 6)
+
+```
+bash dDocent_ngs_3.2
+```
+```
+dDocent 3.1.0 
+
+Contact jpuritz@uri.edu with any problems 
+
+ 
+Checking for required software
+
+All required software is installed!
+
+dDocent version 3.1.0 started Fri Aug 16 21:17:12 EDT 2024 
+
+30 individuals are detected. Is this correct? Enter yes or no and press [ENTER]
+yes
+Proceeding with 30 individuals
+dDocent detects 80 processors available on this system.
+Please enter the maximum number of processors to use for this analysis.
+20
+
+Do you want to quality trim your reads?
+Type yes or no and press [ENTER]?
+yes
+
+Do you want to perform an assembly?
+Type yes or no and press [ENTER].
+no
+
+Reference contigs need to be in a file named reference.fasta
+
+Do you want to map reads?  Type yes or no and press [ENTER]
+yes
+BWA will be used to map reads.  You may need to adjust -A -B and -O parameters for your taxa.
+Would you like to enter a new parameters now? Type yes or no and press [ENTER]
+yes
+Please enter new value for A (match score).  It should be an integer.  Default is 1.
+2
+Please enter new value for B (mismatch score).  It should be an integer.  Default is 4.
+4
+Please enter new value for O (gap penalty).  It should be an integer.  Default is 6.
+6
+Do you want to use FreeBayes to call SNPs?  Please type yes or no and press [ENTER]
+yes
+Is this a pooled sequencing data set?  Please type yes or no and press [ENTER]
+yes
+
+Please enter your email address.  dDocent will email you when it is finished running.
+Don't worry; dDocent has no financial need to sell your email address to spammers.
+
+
+```
+
 
 NEXT STEPS:
-- update raw read names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)!!
-- make config file for dDocent
-- trim raw reads, mapping, and SNP calling with dDocent  
-	- no to assembly bc we have a reference genome 👍🏻
-- SNP filtering
-- ANALYSES! Yay!!
+✅ update raw read names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)!!
+✅ pull dDocent file for poolseq from Amy's github
+✅ set up working ddocent directory
+✅ trim raw reads & mapping with dDocent then check mapping
+- check fastqc on trimmed reads
+- optimize mapping 
+- SNP calling with dDocent  
+- SNP filtering - use the `TotalRawSNPs.vcf`
+- split data set after filtering in ch 1 & 2
+- ANALYSES! Yay!! w/ filtered vcf!
 
 **QUESTIONS, CLARIFICATIONS, and VERBAL PROCESSING with JON:** 
-
-- [Amy's md](https://github.com/amyzyck/RISG_LarvalCADO/blob/main/Analysis/RISG_Larval_Exposure_dDocent_SNPFiltering.md#read-trimming-mapping-and-snp-calling): "Jon downloaded a version of dDocent on my KITT account dDocent_ngs that can be used for Expressed Exome Capture Sequencing (EecSeq) and pooled samples (larval pools). It is located in the RISG_Larval directory"
-
-- Look at read quality & confirm how dDocent will trim these up for me? 
-
-- When to split data into Ch 1 & Ch 2?? 
-	- at VCF filtering?
-
-- Should I run trimming, mapping and SNP calling all in one dDocent run? or is there a reason to do it step-wise?
-
-- Should I first test mapping on a subset first to optimize? or just go for it with default BWA parameters? 
-	- optimizing with samtools flagstats?
-
-- VCF Filtering - use the `TotalRawSNPs.vcf` *NOT* `Final.recode.vcf`?? 
-	- `Final.recode.vcf` is more useful for comparing different pipeline runs
-	- but it is also a filtered snp data set?? 
-	- i am confused about the difference between these two VCFs
-
-- [Amy's pooled larvae variant filtering steps](https://github.com/amyzyck/RISG_LarvalCADO/blob/main/Analysis/RISG_Larval_Exposure_dDocent_SNPFiltering.md#variant-filtering)
-	- use this workflow as reference?
-	- there's step where she splits into block-specific VCFs
-	- should I split into population VCFs 
-	- AND a VCF for each probe set for Vibrio (reminder! two datasets: Vibrio only and Vibrio+CADO captured)
-
-- Compressed filtered VCF (*.vcf.gz) is what I'll use for PCAdapt and other analyses yes??
-
 - ANALYSES! - what should I prioritze?
-	- PCAdapt for a first look
-	- Outlier detection (PCAdapt, OutFlank, LFMM)
+(no to lfmm and outflank - can't use on poolseq)
+	- PCAdapt for a first look - just to make PCA
+	- Cochran Mantel Hanzel test - shared shifts in alleles
 	- Diversity metrics (Nucleotide diversity, Tajima's D, Fst)
-
-- how to slice up and compare data? 
-
-	- CH 1 ARC, NEH, MV (CON v STR w/in each)
-		- treatment comparisons w/in populations 
-		- no hard statistical comparisons between populations (at least for now)
-
-	- CH 2 Vibrio (CC, CS, VC, VS) & different probe sets (treat probe sets as diff groups??)
-		- treatment comparisons w/in dataset
-		- if I had to chose one dataset (for sake of time) - CADO+Vibrio probe??
-
+		- Grenedalf pooled seq diversity metrics (ND)
+	- JG on marine omics 
 
 _________________________________________________________
