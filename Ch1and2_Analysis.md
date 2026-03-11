@@ -295,15 +295,90 @@ Please enter new value for B (mismatch score).  It should be an integer.  Defaul
 Please enter new value for O (gap penalty).  It should be an integer.  Default is 6.
 6
 Do you want to use FreeBayes to call SNPs?  Please type yes or no and press [ENTER]
-yes
+no
 Is this a pooled sequencing data set?  Please type yes or no and press [ENTER]
 yes
 
 Please enter your email address.  dDocent will email you when it is finished running.
 Don't worry; dDocent has no financial need to sell your email address to spammers.
+```
 
+### Resulting files
 
 ```
+.F.fq.gz and .R.fq.gz #original sequence files
+.R1.fq.gz #trimmed read (fwd)
+.R2.fq.gz #trimmed read (rev)
+.RGmg.bam #mapped reads to the genome
+.F.bam #filtered, mapped reads 
+```
+
+`bamlist.list`: a list of all BAM files passed to FreeBayes
+
+## Trimmed reads FastQC & MultiQC report
+
+### FastQC
+FastQC is a program designed to visualize the quality of high throughput sequencing datasets. The report will highlight any areas where the data looks unusual or unreliable.
+```
+mkdir /home/mguidry/1_Larval-CADO/fastqc_trimmed
+cd fastqc_trimmed
+#run the following in tmux session - used two (one for FWD and one for REV)
+conda activate larvae
+cd Larval_dDocent/
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_trimmed/ ./*F.fastq.gz 
+fastqc -o /home/mguidry/1_Larval-CADO/fastqc_trimmed/ ./*R.fastq.gz 
+
+# after fastqc is done - ran multiqc from the dir with the fastqc outputs
+multiqc .
+```
+
+### Mapping optimization
+After trimming and mapping are done, we can look at optimizing mapping with samtools.
+
+Take a look at how mapping went with default parameters then we can run mapping with different parameters on a few samples to explore the data a bit more.
+
+`samtools` helps us look at BAM files. Can check a couple samples to see what the difference is between filtered and unfiltered reads or different mapping parameters.
+
+```
+conda activate larvae
+ls *.bam 
+samtools #shows you everything samtools can do
+```
+
+
+samtools report exploring **filtered** mapped reads
+```
+samtools flagstats -@16 ARC2_CB1.F.bam > ARC2_CB1.F.flagstats.txt 
+samtools flagstats -@16 NEH2_CB1.F.bam > NEH2_CB1.F.flagstats.txt 
+samtools flagstats -@16 NEH1_CB1.F.bam > NEH1_CB1.F.flagstats.txt 
+samtools flagstats -@16 NEH3_CB1.F.bam > NEH3_CB1.F.flagstats.txt
+samtools flagstats -@16 MV1_CB1.F.bam > MV1_CB1.F.flagstats.txt
+samtools flagstats -@16 MV2_CB1.F.bam > MV2_CB1.F.flagstats.txt
+samtools flagstats -@16 MV3_CB1.F.bam > MV3_CB1.F.flagstats.txt
+
+samtools flagstats -@16 CON_TV0Vibrio.F.bam > CON_TV0Vibrio.F.flagstats.txt
+samtools flagstats -@16 VS1_TVEVibrio.F.bam > VS1_TVEVibrio.F.flagstats.txt
+samtools flagstats -@16 CC1_TVECombined.F.bam > CC1_TVECombined.F.flagstats.txt
+samtools flagstats -@16 VC1_TVECombined.F.bam > VC1_TVECombined.F.flagstats.txt
+
+mv *flagstats.txt ./map_opt/flagstats/
+
+## run for all samples 
+for bam in *.F.bam; do
+    base=${bam%.F.bam}                # strip .F.bam
+    samtools flagstat -@16 "$bam" > "map_opt/flagstats/${base}.flagstats.txt"
+done
+```
+Mapping looked pretty good across all samples! I'll stick with this for now. I may end up spending more time optimizing and fine-tuning mapping later, but I am happy with this!
+
+**Following trimmed fastqc and mapping investigation, I submitted a new dDocent run to call SNPs**
+
+## SNP filtering plan to review with Jon: 
+
+Establish Ch 1 and Ch 2 VCFs before filtering to maximize the the number of snps for each project
+
+Start analysis with one sync file for CH 1 population comparisons & can also split into population 
+
 
 
 NEXT STEPS:
@@ -311,12 +386,14 @@ NEXT STEPS:
 ✅ pull dDocent file for poolseq from Amy's github
 ✅ set up working ddocent directory
 ✅ trim raw reads & mapping with dDocent then check mapping
-- check fastqc on trimmed reads
-- optimize mapping 
+✅ fastqc on trimmed reads
+✅ check mapping stats 
+- multiqc on trimmed reads*** (have to re-install multiqc in conda env, wait until snp calling is done for larv env)
 - SNP calling with dDocent  
+- split the vcf into ch 1 and 2 before filtering!
 - SNP filtering - use the `TotalRawSNPs.vcf`
 - split data set after filtering in ch 1 & 2
-- ANALYSES! Yay!! w/ filtered vcf!
+- ANALYSES! Yay!! w/ sync file!!
 
 **QUESTIONS, CLARIFICATIONS, and VERBAL PROCESSING with JON:** 
 - ANALYSES! - what should I prioritze?
