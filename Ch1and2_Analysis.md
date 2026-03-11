@@ -374,34 +374,30 @@ Mapping looked pretty good across all samples! I'll stick with this for now. I m
 **Following trimmed fastqc and mapping investigation, I submitted a new dDocent run to call SNPs**
 
 ## SNP filtering plan to review with Jon: 
-
-Establish Ch 1 and Ch 2 VCFs before filtering to maximize the the number of snps for each project
-
-Start analysis with one sync file for CH 1 population comparisons & can also split into population 
+- Establish Ch 1 and Ch 2 VCFs before filtering to maximize the the number of snps for each project
+- Start analysis with one sync file for CH 1 population comparisons & can also split into population if deemed interesting/appropriate
 
 
 
 NEXT STEPS:
+
 ✅ update raw read names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)!!
+
 ✅ pull dDocent file for poolseq from Amy's github
+
 ✅ set up working ddocent directory
+
 ✅ trim raw reads & mapping with dDocent then check mapping
+
 ✅ fastqc on trimmed reads
+
 ✅ check mapping stats 
+
 - multiqc on trimmed reads*** (have to re-install multiqc in conda env, wait until snp calling is done for larv env)
 - SNP calling with dDocent  
 - split the vcf into ch 1 and 2 before filtering!
 - SNP filtering - use the `TotalRawSNPs.vcf`
-- split data set after filtering in ch 1 & 2
-- ANALYSES! Yay!! w/ sync file!!
-
-**QUESTIONS, CLARIFICATIONS, and VERBAL PROCESSING with JON:** 
-- ANALYSES! - what should I prioritze?
-(no to lfmm and outflank - can't use on poolseq)
-	- PCAdapt for a first look - just to make PCA
-	- Cochran Mantel Hanzel test - shared shifts in alleles
-	- Diversity metrics (Nucleotide diversity, Tajima's D, Fst)
-		- Grenedalf pooled seq diversity metrics (ND)
-	- JG on marine omics 
+- convert to sync files 
+- poolseq analysis (CMH + diversity metrics)
 
 _________________________________________________________
