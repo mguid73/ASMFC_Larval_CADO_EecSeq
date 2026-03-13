@@ -328,6 +328,7 @@ cd Larval_dDocent/
 fastqc -o /home/mguidry/1_Larval-CADO/fastqc_trimmed/ ./*F.fastq.gz 
 fastqc -o /home/mguidry/1_Larval-CADO/fastqc_trimmed/ ./*R.fastq.gz 
 
+# had to reinstall multiqc in the conda environemnt for some reason ##
 # after fastqc is done - ran multiqc from the dir with the fastqc outputs
 multiqc .
 ```
@@ -373,31 +374,118 @@ Mapping looked pretty good across all samples! I'll stick with this for now. I m
 
 **Following trimmed fastqc and mapping investigation, I submitted a new dDocent run to call SNPs**
 
-## SNP filtering plan to review with Jon: 
-- Establish Ch 1 and Ch 2 VCFs before filtering to maximize the the number of snps for each project
-- Start analysis with one sync file for CH 1 population comparisons & can also split into population if deemed interesting/appropriate
+## 4. Variant filtering
+Following Jon's analysis from [Larval CASE project](https://github.com/jpuritz/Puritz_etal_CASE); analysis description can also be found in [`Scripts/CASE_FULL_FINAL.Rmd`](Scripts/CASE_FULL_FINAL.Rmd)
+
+### Download Popoolation2 scripts
+```
+cd Scripts
+git clone https://github.com/ToBoDev/assessPool.git
+```
+
+### Create conda (mamba) environment called `CADO`
+```
+mamba env create --file CADO_environment.yaml
+mamba env create --file random_draw_environment.yaml
+```
+
+### Run filtering script
+Filtering to a depth cutoff of 20
+
+```
+mamba activate CADO
+cd ../Larval_ddocent/raw.vcf/
+bash ../../Scripts/CASE_PVCF_filter2.sh CADO 64 20
+```
+
+```
+source activate CADO
+cd ../raw.vcf 
+bcftools index CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz
+bcftools query -l CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz > samples
+```
+
+#### EDIT JONS CODE BELOW TO CONTINUE ##### 
+ALSO! add in a place to split up sync files into Ch 1 & 2
+
+## Create Unified Sync file
+Each sequencing run had some extra samples that need to be removed before starting the analysis
+Each block was filtered for missing data less than 10% and MAF of > 0.015 based on read counts using VCF file first.
 
 
 
-NEXT STEPS:
+```{bash, eval=FALSE}
+source activate CASE
 
-✅ update raw read names to fit [dDocent naming convention](https://ddocent.com/UserGuide/#naming-convention)!!
+cd ../raw.vcf
+bcftools view -S <(grep B11 samples | grep -v 1.G) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > B11.pos
 
-✅ pull dDocent file for poolseq from Amy's github
+bcftools view -S <(grep B10 samples | grep -v J17 | grep -v J05) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1' | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > B10.pos
 
-✅ set up working ddocent directory
+bcftools view -S <(grep B12 samples) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1' | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n'  > B12.pos
 
-✅ trim raw reads & mapping with dDocent then check mapping
+cat B*.pos | sort | uniq > fil.pos
 
-✅ fastqc on trimmed reads
+bcftools view -R fil.pos -S <(grep -v 1.GB11 samples | grep -v J17B10| grep -v J05B10) --threads 40 -m2 -M 4 CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz -O z -o SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz
 
-✅ check mapping stats 
+#bcftools view --threads 40 SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz | mawk '!/#/' | cut -f 1,2 | mawk '{print $1"\t"$2-1"\t"$2}' > total.snp.bed
 
-- multiqc on trimmed reads*** (have to re-install multiqc in conda env, wait until snp calling is done for larv env)
-- SNP calling with dDocent  
-- split the vcf into ch 1 and 2 before filtering!
-- SNP filtering - use the `TotalRawSNPs.vcf`
-- convert to sync files 
-- poolseq analysis (CMH + diversity metrics)
+#bedtools intersect -wb -a total.snp.bed -b ~/CASE/analysis/sorted.ref3.0.gene.bed | grep -oh "gene=LOC.*;g" | sed 's/gene=//g' | sed 's/;g//g' | sort | uniq > CASE.study.background.LOC
+
+```
+
+### Create Sync files
+```{bash, eval=FALSE}
+source activate CASE
+
+bcftools view --threads 40 ../raw.vcf/SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
+python2 ../scripts/VCFtoPopPool.py temp.vcf CASE.All.Blocks.sync 
+rm temp.vcf
+```
+
+### This sort is to maintain reproducibility across older analysis
+```{bash}
+mawk 'BEGIN {OFS="\t"
+    order["CHROM"] = 0
+    order["NC_035789.1"] = 1
+    order["NC_035780.1"] = 2
+    order["NC_035781.1"] = 3
+    order["NC_035782.1"] = 4
+    order["NC_035783.1"] = 5
+    order["NC_035784.1"] = 6
+    order["NC_035785.1"] = 7
+    order["NC_035786.1"] = 8
+    order["NC_035787.1"] = 9
+    order["NC_035788.1"] = 10
+}
+{ print order[$1], $2, NR, $0 }' CASE.All.Blocks.sync | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test.sync
+
+mv test.sync CASE.All.Blocks.sync
+```
+
+```{bash}
+cat <(echo -e "CHROM\tPOS") ../raw.vcf/B10.pos > B10.pos
+cat <(echo -e "CHROM\tPOS") ../raw.vcf/B11.pos > B11.pos
+cat <(echo -e "CHROM\tPOS") ../raw.vcf/B12.pos > B12.pos
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B10.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B10$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block10.sync
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B11.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B11$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block11.sync
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B12.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B12$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block12.sync
+```
+
+## Add coverage stats to sync file and filter by minimum coverage
+
+```{bash, eval=FALSE}
+source activate CASE
+mawk -f ../scripts/add_cov_sync CASE.Block10.sync | mawk '$20 > 9 && $22 > 24' > CASE.dp20.Block10.cov.sync &
+mawk -f ../scripts/add_cov_sync CASE.Block11.sync | mawk '$24 > 9 && $26 > 24' > CASE.dp20.Block11.cov.sync &
+mawk -f ../scripts/add_cov_sync CASE.Block12.sync | mawk '$24 > 9 && $26 > 24' > CASE.dp20.Block12.cov.sync &
+#mawk -f ../scripts/add_cov_sync CASE.All.Blocks.sync | mawk '$66 > 9 && $68 > 24' > CASE.All.Blocks.cov.sync
+mawk -f ../scripts/add_cov_sync CASE.All.Blocks.sync | mawk '$60 > 9 && $62 > 24' | mawk '!/\t\.\t/'  > CASE.All.Blocks.cov.sync
+
+cut -f1,2 CASE.dp20.Block1*.cov.sync | sort | uniq -c | mawk '$1 > 2' | mawk '{print $2 "\t" $3}' > filtered.loci.allthreeblocks
+```
+
+## REMAINING ANALYSES IN R!
 
 _________________________________________________________
