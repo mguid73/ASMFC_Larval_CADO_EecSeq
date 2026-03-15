@@ -408,39 +408,61 @@ bcftools query -l CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz > samples
 #### EDIT JONS CODE BELOW TO CONTINUE ##### 
 ALSO! add in a place to split up sync files into Ch 1 & 2
 
-## Create Unified Sync file
-Each sequencing run had some extra samples that need to be removed before starting the analysis
-Each block was filtered for missing data less than 10% and MAF of > 0.015 based on read counts using VCF file first.
+## Create Sync file
+Filtered for missing data less than 10% and MAF of > 0.015 based on read counts using VCF file first then filters by sites with 2-4 alleles and outputs filtered sites in a compressed VCF.
 
-
-
+Can also conver to bed file with SNP coordinates and assign gene annotations to these gene IDs
 ```{bash, eval=FALSE}
-source activate CASE
+source activate CADO
 
 cd ../raw.vcf
-bcftools view -S <(grep B11 samples | grep -v 1.G) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > B11.pos
+# filters for missing data less than 10%, MAF of >0.015 based on read counts and filters by sites with 2-4 alleles then outputs a compressed VCF
+bcftools view CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' -O z -o SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz
 
-bcftools view -S <(grep B10 samples | grep -v J17 | grep -v J05) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1' | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > B10.pos
-
-bcftools view -S <(grep B12 samples) CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1' | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n'  > B12.pos
-
-cat B*.pos | sort | uniq > fil.pos
-
-bcftools view -R fil.pos -S <(grep -v 1.GB11 samples | grep -v J17B10| grep -v J05B10) --threads 40 -m2 -M 4 CASE.TRSdp.20.g5.nDNA.FIL.vcf.gz -O z -o SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz
-
+# converts final VCF to BED file of SNP coordinates (0-based start, 1-based end)
 #bcftools view --threads 40 SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz | mawk '!/#/' | cut -f 1,2 | mawk '{print $1"\t"$2-1"\t"$2}' > total.snp.bed
 
+# intersects SNPS with gene annotation BED, extracting gene IDs matching gene=LOC...;g, cleans them and produced a unique list of basckground genes for enrichment analysis (like topGO)
 #bedtools intersect -wb -a total.snp.bed -b ~/CASE/analysis/sorted.ref3.0.gene.bed | grep -oh "gene=LOC.*;g" | sed 's/gene=//g' | sed 's/;g//g' | sort | uniq > CASE.study.background.LOC
-
 ```
+
+> NOTE: Because the previous filtering script didn't separate InDels from SNPs with pooled data,
+> the filtered variant call file (VCF) I have here are loci that have 4 alleles or less. 
+> These can be a mixture of SNP, InDels, and complex mutations. 
+>
+> see below for filtering to just snps with `bcftools view --type snps` to get the conversion from vcf to sync file to work
 
 ### Create Sync files
 ```{bash, eval=FALSE}
-source activate CASE
+source activate CADO
 
-bcftools view --threads 40 ../raw.vcf/SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
-python2 ../scripts/VCFtoPopPool.py temp.vcf CASE.All.Blocks.sync 
-rm temp.vcf
+bcftools view --threads 40 ../raw.vcf/SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
+bcftools view --type snps -m2 -M2 temp.vcf -o temp_snps.vcf
+
+# convert to sync file
+python2 ../../Scripts/VCFtoPopPool.py temp_snps.vcf Larval.snps.sync 
+
+# pull positions of CHAPTER 1 SNPs from vcf file
+bcftools view -S <(grep -E '^(ARC|NEH|MV)' samples) temp_snps.vcf | bcftools query -f '%CHROM\t%POS\n' > Chapter1.Larval.pos
+
+# pull positions of CHAPTER 2 SNPs from vcf file
+bcftools view -S <(grep -E '^(VC|VS|CC|CS|CON|STR)' samples) temp_snps.vcf | bcftools query -f '%CHROM\t%POS\n' > Chapter2.Larval.pos
+
+#rm temp.vcf temp_snps.vcf
+```
+
+I added in the `--type snps` line because I was running into the error below. I believe this error arose from issues with the way the VCFtoPopPool.py script was dealing with complex haplotypes. I think where the script was randomly assigning a nucleotide to complex haplotypes lead to a mismatch in the OBS and n variables.
+
+--type snps removes indels and MNPs, which are the most common sources of malformed or inconsistent allele/count fields in FreeBayes output
+-m2 -M2 enforces strictly biallelic sites, so alleles is always exactly [REF, ALT1] — a length-2 list, and OBS = RO + AO will always also be length 2, so n never exceeds the bounds of OBS
+```{bash, eval=FALSE}
+#note - Larval.sync file is the truncated result of the vcf->sync converstion of the full vcf with complex haplotypes
+(CADO) python2 ../../Scripts/VCFtoPopPool.py temp.vcf Larval.sync 
+91
+Traceback (most recent call last):
+  File "../../Scripts/VCFtoPopPool.py", line 110, in <module>
+    a[z[alleles[n]]]=OBS[n]
+IndexError: list index out of range
 ```
 
 ### This sort is to maintain reproducibility across older analysis
@@ -458,34 +480,108 @@ mawk 'BEGIN {OFS="\t"
     order["NC_035787.1"] = 9
     order["NC_035788.1"] = 10
 }
-{ print order[$1], $2, NR, $0 }' CASE.All.Blocks.sync | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test.sync
+{ print order[$1], $2, NR, $0 }' Larval.snps.sync | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test.sync
 
-mv test.sync CASE.All.Blocks.sync
+mv test.sync Larval.snps.sync
 ```
 
+## Split sync files by project with positional lookup***
 ```{bash}
-cat <(echo -e "CHROM\tPOS") ../raw.vcf/B10.pos > B10.pos
-cat <(echo -e "CHROM\tPOS") ../raw.vcf/B11.pos > B11.pos
-cat <(echo -e "CHROM\tPOS") ../raw.vcf/B12.pos > B12.pos
+cat <(echo -e "CHROM\tPOS") Chapter1.Larval.pos > Ch1.head.pos
+cat <(echo -e "CHROM\tPOS") Chapter2.Larval.pos > Ch2.head.pos
 
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B10.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B10$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block10.sync
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B11.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B11$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block11.sync
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' B12.pos CASE.All.Blocks.sync | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/B12$/)k[i]}{o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' | mawk '!/\t\.\t/' > CASE.Block12.sync
+# Chapter 1: ARC2, NEH, MV populations - with positional look up ***
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.snps.sync \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(ARC|NEH|MV)/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > Chapter1.Larval.snps.sync
+
+
+# Chapter 2: VC, VS, CC, CS, CON, STR populations - with positional look up ***
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch2.head.pos Larval.snps.sync \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(VC|VS|CC|CS|CON|STR)/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > Chapter2.Larval.snps.sync
+
+
+# Count samples per file (subtract 3 for CHROM, POS, REF)
+head -1 Chapter1.Larval.snps.sync | tr '\t' '\n' | wc -l  
+# output = 66 -3 = 63 samples = 9 samples/exp * 7 exp = 63 samples (looks good!)
+head -1 Chapter2.Larval.snps.sync | tr '\t' '\n' | wc -l
+# output = 31 - 3 = 28 samples = 14 samples/probeset * 2 probesets = 28 (looks good!)
+head -1 Larval.snps.sync | tr '\t' '\n' | wc -l
+# output = 94 -3 = 91 samples 
+# 63+28 = 91 (all good)
+
+#check out column names for each sync file
+head -1 Chapter1.Larval.snps.sync | tr '\t' '\n'
+head -1 Chapter2.Larval.snps.sync | tr '\t' '\n'
 ```
 
-## Add coverage stats to sync file and filter by minimum coverage
-
+## CHAPTER 1 - Add coverage stats to sync file and filter by minimum and mean coverage
 ```{bash, eval=FALSE}
-source activate CASE
-mawk -f ../scripts/add_cov_sync CASE.Block10.sync | mawk '$20 > 9 && $22 > 24' > CASE.dp20.Block10.cov.sync &
-mawk -f ../scripts/add_cov_sync CASE.Block11.sync | mawk '$24 > 9 && $26 > 24' > CASE.dp20.Block11.cov.sync &
-mawk -f ../scripts/add_cov_sync CASE.Block12.sync | mawk '$24 > 9 && $26 > 24' > CASE.dp20.Block12.cov.sync &
-#mawk -f ../scripts/add_cov_sync CASE.All.Blocks.sync | mawk '$66 > 9 && $68 > 24' > CASE.All.Blocks.cov.sync
-mawk -f ../scripts/add_cov_sync CASE.All.Blocks.sync | mawk '$60 > 9 && $62 > 24' | mawk '!/\t\.\t/'  > CASE.All.Blocks.cov.sync
+source activate CADO
 
-cut -f1,2 CASE.dp20.Block1*.cov.sync | sort | uniq -c | mawk '$1 > 2' | mawk '{print $2 "\t" $3}' > filtered.loci.allthreeblocks
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt Chapter1.Larval.snps.sync > Ch1.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' Ch1.cov.sync > Ch1.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' Ch1.cov.sync
+# 67 MIN_COV
+# 68 MAX_COV
+# 69 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$67 > 9 && $69 > 24' Ch1.cov.sync > Ch1.dp25.cov.sync
+
+cat Ch1.cov.sync | wc -l 
+# 146,537
+cat Ch1.dp25.cov.sync | wc -l 
+# 98,680
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (47,857 snps removed).
+
+## CHAPTER 2 - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt Chapter2.Larval.snps.sync > Ch2.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' Ch2.cov.sync > Ch2.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' Ch2.cov.sync
+# 32 MIN_COV
+# 33 MAX_COV
+# 34 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$32 > 9 && $34 > 24' Ch2.cov.sync > Ch2.dp25.cov.sync
+
+cat Ch2.cov.sync | wc -l 
+# 146,537
+cat Ch2.dp25.cov.sync | wc -l 
+# 145,530
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (1,007 snps removed).
+
+
+could also filter coverage for the combined chapter 1 & 2 sync file, but I didn't need to
+```{bash, eval=FALSE}
+#mawk -f ../../Scripts/add_cov_sync Larval.snps.sync | mawk '$66 > 9 && $68 > 24' > Larval.snps.cov.sync
 ```
 
 ## REMAINING ANALYSES IN R!
 
+### Chapter 1 filtered sync file
+`Ch1.dp25.cov.sync` copied into 1_Larval-CADO Analysis directory
+
+### Chapter 2 filtered sync file
+`Ch2.dp25.cov.sync` copied into 2_Vibrio-Challenge Analysis directory
+
+
+See ____.Rmd
 _________________________________________________________
