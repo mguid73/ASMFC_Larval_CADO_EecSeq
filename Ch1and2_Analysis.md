@@ -585,3 +585,8 @@ could also filter coverage for the combined chapter 1 & 2 sync file, but I didn'
 
 See ____.Rmd
 _________________________________________________________
+
+
+# QUESTIONS FOR JON:
+- look at --type snps filtering step - I couldn't get the sync file conversion to work w/o this step
+- why are there the same number of snps in each chapter sync file before filtering for coverage? I only pulled the sites specific to each chapter but the .pos files seem to be the same?
