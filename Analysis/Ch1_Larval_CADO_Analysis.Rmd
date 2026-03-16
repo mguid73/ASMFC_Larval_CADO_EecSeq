@@ -1,0 +1,316 @@
+---
+title: "Ch 1 Larval CADO w/ multiple populations"
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = TRUE)
+```
+
+# Setup
+```{r include=TRUE}
+library(ggplot2)
+library(tidyr)
+library(plyr)
+library(dplyr)
+library(qvalue)
+library(stringr)
+library(pcadapt)
+library(poolSeq)
+library(ACER)
+library(ggman)
+library(VennDiagram)
+library(scales)
+library(data.table)
+library(patchwork)
+```
+
+```{r include=TRUE}
+# Function to convert p-values to q-values
+Qvalue_convert <- function(table) {
+
+
+table <- spread(table,GROUP,PVAL)  
+  
+table$CHR <- table$CHROM
+
+table %>% 
+  mutate(CHR = str_replace(CHR, "NC_035780.1", "1")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035781.1", "2")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035782.1", "3")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035783.1", "4")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035784.1", "5")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035785.1", "6")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035786.1", "7")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035787.1", "8")) %>%
+  mutate(CHR = str_replace(CHR, "NC_035788.1", "9")) %>% 
+  mutate(CHR = str_replace(CHR, "NC_035789.1", "10"))  -> pp1
+
+pp1 <- unite(pp1, "SNP", c("CHROM","BP"),remove = FALSE)
+
+pp1$CHR <- as.numeric(pp1$CHR)  
+
+# Set pi0=1 to equal Benjamini Hochberg
+pp1$QSTR <- qvalue(pp1$PSTR, pi0 = 1)$qvalues
+pp1$QCON <- qvalue(pp1$PCON, pi0 = 1)$qvalues
+
+
+return(pp1)
+}
+```
+
+```{r include=TRUE}
+# Function to determine significant loci in various outputs
+Significant_subset <- function(pv, alpha, alpha2) {
+  # Add new logical columns based on conditions
+  pv$Sig.STR <- pv$QSTR < alpha
+  pv$Sig.CON <- pv$QCON < alpha
+  
+  # Subset the dataframe
+  ppsig <- subset(pv, QSTR < alpha )
+  ppsig <- subset(ppsig, QCON > alpha2)
+  
+  # Print diagnostics
+  print(nrow(pv))
+  print(nrow(ppsig))
+  print(nrow(ppsig) / nrow(pv))
+  
+  # Return the modified dataframe
+  return(ppsig)
+}
+```
+
+```{r include=TRUE}
+group_and_average <- function(df) {
+  df %>%
+    dplyr::group_by(SNP) %>%
+    dplyr::summarize(
+      across(
+        c(PCON, PSTR, CHR, QCON, QSTR),
+        ~ if (all(is.na(.))) NA else min(., na.rm = TRUE)
+      ),
+      Sig.STR = any(Sig.STR, na.rm = TRUE),
+      CHROM  = first(CHROM),
+      BP     = first(BP),
+      .groups = "drop"
+    )
+}
+```
+
+```{r include=TRUE}
+cbPaletteSmall <- c("purple", "green", "gold", "red", "orange", "blue", "violet")
+```
+
+```{r}
+sessionInfo()
+```
+
+
+# Visualize across 10,000 random loci
+
+## All
+```{bash, eval = FALSE}
+mamba activate CADO
+
+cut -f1,2 Ch1.dp25.cov.sync | sort -u  > filtered.loci
+
+mawk '!/CHR/' filtered.loci | shuf -n 50000  | shuf -n 10000 > rand.loci
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' rand.loci Ch1.dp25.cov.sync | cut --complement -f67- > input.all.rand.sync
+
+```
+
+```{r}
+input.all.rand <- read.sync(file="input.all.rand.sync", gen=seq(1,63), repl=seq(1,63), polarization="rising")
+
+
+input.all.rand.af <- af(input.all.rand,gen=seq(1,63), repl=seq(1,63))
+
+bio.labels <- c(
+  "ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03",
+  "MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+  "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+  "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03",
+  "NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+  "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+  "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03"
+)
+length(bio.labels)  # should be 63
+
+pop.ids <- colnames(input.all.rand.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = bio.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^MV",  meta$bio_label),  "MV",
+                          ifelse(grepl("^NEH", meta$bio_label), "NEH", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(input.all.rand.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.rand.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(input.all.rand.af) <- meta$bio_label
+```
+
+
+### PCA of random 10K loci from all samples 
+shows a strong pattern of population and experiment year (2023 – ARC2, NEH1, MV1, MV2; 2024 – NEH2, NEH3, MV3)
+```{r}
+# Perform PCA
+af_t <- t(input.all.rand.af)
+
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.rand.af)  # keep locus IDs if you have them
+
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+pca_rand10k <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Trial, fill=Trial)) +
+  geom_point(aes(alpha=0.2), size =4,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Allele Frequencies"
+  ); pca_rand10k
+
+ggsave(filename = "PCA/ch1_pca_rand10k.png", plot = pca_rand10k, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+## PCA of random 10K loci from All Initial Samples
+As expected, shows the same strong pattern of population and experiment year seen in the all sample plot
+```{r}
+#subset data to only T0 initial samples
+t0_cols <- grepl("_T0", colnames(input.all.rand.af))
+input.T0.rand.af <- input.all.rand.af[, t0_cols]
+afi_t <- t(input.T0.rand.af)
+
+#subset metadata table
+t0_meta <- subset(meta, meta$treatment == "initial")
+View(t0_meta)
+
+# start pca code
+pca_i_res <- prcomp(afi_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_i_df <- as.data.frame(pca_i_res$x)
+
+var_explained <- pca_i_res$sdev^2 / sum(pca_i_res$sdev^2) * 100
+
+pca_i_df$Treatment <- t0_meta$treatment
+pca_i_df$Trial <- t0_meta$trial
+
+pca_t0rand10k<- ggplot(pca_i_df, aes(x = PC1, y = PC2, color = Trial, fill=Trial)) +
+  geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_classic() +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Allele Frequencies"
+  );pca_t0rand10k
+
+ggsave(filename = "PCA/ch1_pca_initial_rand10k.png", plot = pca_t0rand10k, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+
+## Random loci for each individual experimental population (ARC, NEH, MV)
+
+
+Random loci for each experimental block - Jon's code 
+```{r}
+# Ensure meta is keyed by bio_label and in column order
+meta <- meta[match(colnames(input.all.rand.af), meta$bio_label), ]
+stopifnot(all(meta$bio_label == colnames(input.all.rand.af)))
+
+pops <- c("ARC", "MV", "NEH")
+
+for (pop in pops) {
+  # select columns belonging to this population
+  cols_idx <- which(meta$pop == pop)
+  cat(sprintf("\n== Population %s: found %d sample columns ==\n", pop, length(cols_idx)))
+  if (length(cols_idx) < 2) {
+    warning(sprintf("Population %s: less than 2 samples found - skipping PCA.", pop))
+    next
+  }
+
+  sub_mat <- input.all.rand.af[, cols_idx, drop = FALSE]
+  cat("  dim(sub_mat) (loci x samples):", dim(sub_mat), "\n")
+
+  # transpose: rows = samples, cols = loci
+  mat_t <- t(sub_mat)
+
+  # drop zero-variance loci within this population
+  var_cols <- apply(mat_t, 2, var, na.rm = TRUE)
+  keep     <- which(var_cols > 0)
+  removed_n <- sum(var_cols == 0)
+  cat("  loci removed (zero variance):", removed_n, "\n")
+
+  if (length(keep) < 2) {
+    warning(sprintf("Population %s: fewer than 2 variable loci after filtering - skipping PCA.", pop))
+    next
+  }
+  mat_t2 <- mat_t[, keep, drop = FALSE]
+  cat("  dim(mat_t2) (samples x retained loci):", dim(mat_t2), "\n")
+
+  # PCA
+  pca_res <- prcomp(mat_t2, center = TRUE, scale. = TRUE)
+  pca_df  <- as.data.frame(pca_res$x)
+
+  # add metadata for these samples
+  sample_labels <- rownames(mat_t2)                      # bio_labels
+  sample_meta   <- meta[match(sample_labels, meta$bio_label), ]
+
+  pca_df$population <- sample_meta$population            # should all be 'pop'
+  pca_df$treatment  <- sample_meta$treatment             # T0 / CB / SB
+  pca_df$bio_label  <- sample_meta$bio_label
+  pca_df$trial <- sample_meta$trial
+
+  var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
+
+  # palette for treatment or population; here color by treatment
+  if (exists("cbPaletteSmall")) {
+    fill_scale <- scale_fill_manual(values = cbPaletteSmall, name = "Treatment")
+  } else {
+    fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
+  }
+
+  # plot: within a population, color by treatment
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, fill = treatment)) +
+    geom_point(size = 5, shape = 21, color = "black", alpha = 0.8) +
+    fill_scale +
+    geom_text_repel(aes(label = trial), size = 3) +
+    theme_classic() +
+    theme(axis.title.x = element_text(size = 14),
+          axis.title.y = element_text(size = 14),
+          plot.title   = element_text(hjust = 0.5)) +
+    labs(
+      title = paste0("PCA - Population ", pop),
+      x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+      y = paste0("PC2 (", round(var_explained[2], 1), "%)")
+    )
+
+  outfile <- paste0("PCA_population_", pop, ".png")
+  ggsave(outfile, plot = p, width = 10, height = 7, dpi = 300)
+  cat("  saved:", outfile, "\n")
+}
+
+```
