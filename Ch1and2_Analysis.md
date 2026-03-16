@@ -405,8 +405,6 @@ bcftools index CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz
 bcftools query -l CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz > samples
 ```
 
-#### EDIT JONS CODE BELOW TO CONTINUE ##### 
-ALSO! add in a place to split up sync files into Ch 1 & 2
 
 ## Create Sync file
 Filtered for missing data less than 10% and MAF of > 0.015 based on read counts using VCF file first then filters by sites with 2-4 alleles and outputs filtered sites in a compressed VCF.
@@ -451,7 +449,7 @@ bcftools view -S <(grep -E '^(VC|VS|CC|CS|CON|STR)' samples) temp_snps.vcf | bcf
 #rm temp.vcf temp_snps.vcf
 ```
 
-I added in the `--type snps` line because I was running into the error below. I believe this error arose from issues with the way the VCFtoPopPool.py script was dealing with complex haplotypes. I think where the script was randomly assigning a nucleotide to complex haplotypes lead to a mismatch in the OBS and n variables.
+I added in the `--type snps` line because I was running into the error below. I believe this error arose from issues with the way the VCFtoPopPool.py script was dealing with complex haplotypes. I think where the script was randomly assigning a nucleotide to complex haplotypes lead to a mismatch in the OBS and n variables. When I got the error, the script still generated a sync file, however I think it was truncated as it was much smaller in size than the sync file generated after running the snp filter.
 
 --type snps removes indels and MNPs, which are the most common sources of malformed or inconsistent allele/count fields in FreeBayes output
 -m2 -M2 enforces strictly biallelic sites, so alleles is always exactly [REF, ALT1] — a length-2 list, and OBS = RO + AO will always also be length 2, so n never exceeds the bounds of OBS
@@ -588,5 +586,5 @@ _________________________________________________________
 
 
 # QUESTIONS FOR JON:
-- look at --type snps filtering step - I couldn't get the sync file conversion to work w/o this step
+- look at --type snps filtering step
 - why are there the same number of loci in each chapter sync file before filtering for coverage? I only pulled the sites specific to each chapter but the .pos files seem to be the same?
