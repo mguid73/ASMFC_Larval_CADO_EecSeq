@@ -233,9 +233,6 @@ ggsave(filename = "PCA/ch1_pca_initial_rand10k.png", plot = pca_t0rand10k, width
 
 
 ## Random loci for each individual experimental population (ARC, NEH, MV)
-
-
-Random loci for each experimental block - Jon's code 
 ```{r}
 # Ensure meta is keyed by bio_label and in column order
 meta <- meta[match(colnames(input.all.rand.af), meta$bio_label), ]
@@ -308,9 +305,244 @@ for (pop in pops) {
       y = paste0("PC2 (", round(var_explained[2], 1), "%)")
     )
 
-  outfile <- paste0("PCA_population_", pop, ".png")
+  outfile <- paste0("PCA/PCA_population_", pop, ".png")
   ggsave(outfile, plot = p, width = 10, height = 7, dpi = 300)
   cat("  saved:", outfile, "\n")
 }
+
+```
+
+## Random loci for each individual experimental trial (ARC2, NEH1-3, MV1-3)
+```{r}
+# Ensure meta is keyed by bio_label and in column order
+meta <- meta[match(colnames(input.all.rand.af), meta$bio_label), ]
+stopifnot(all(meta$bio_label == colnames(input.all.rand.af)))
+
+trials <- c("ARC2", "MV1", "MV2", "MV3", "NEH1", "NEH2", "NEH3")
+
+for (trial in trials) {
+  # select columns belonging to this population
+  cols_idx <- which(meta$trial == trial)
+  cat(sprintf("\n== Population %s: found %d sample columns ==\n", trial, length(cols_idx)))
+  if (length(cols_idx) < 2) {
+    warning(sprintf("Population %s: less than 2 samples found - skipping PCA.", trial))
+    next
+  }
+
+  sub_mat <- input.all.rand.af[, cols_idx, drop = FALSE]
+  cat("  dim(sub_mat) (loci x samples):", dim(sub_mat), "\n")
+
+  # transpose: rows = samples, cols = loci
+  mat_t <- t(sub_mat)
+
+  # drop zero-variance loci within this population
+  var_cols <- apply(mat_t, 2, var, na.rm = TRUE)
+  keep     <- which(var_cols > 0)
+  removed_n <- sum(var_cols == 0)
+  cat("  loci removed (zero variance):", removed_n, "\n")
+
+  if (length(keep) < 2) {
+    warning(sprintf("Trial %s: fewer than 2 variable loci after filtering - skipping PCA.", trial))
+    next
+  }
+  mat_t2 <- mat_t[, keep, drop = FALSE]
+  cat("  dim(mat_t2) (samples x retained loci):", dim(mat_t2), "\n")
+
+  # PCA
+  pca_res <- prcomp(mat_t2, center = TRUE, scale. = TRUE)
+  pca_df  <- as.data.frame(pca_res$x)
+
+  # add metadata for these samples
+  sample_labels <- rownames(mat_t2)                      # bio_labels
+  sample_meta   <- meta[match(sample_labels, meta$bio_label), ]
+
+  pca_df$population <- sample_meta$population            # should all be 'pop'
+  pca_df$treatment  <- sample_meta$treatment             # T0 / CB / SB
+  pca_df$bio_label  <- sample_meta$bio_label
+  pca_df$trial <- sample_meta$trial
+
+  var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
+
+  # palette for treatment or population; here color by treatment
+  if (exists("cbPaletteSmall")) {
+    fill_scale <- scale_fill_manual(values = cbPaletteSmall, name = "Treatment")
+  } else {
+    fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
+  }
+
+  # plot: within a population, color by treatment
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, fill = treatment)) +
+    geom_point(size = 5, shape = 21, color = "black", alpha = 0.8) +
+    fill_scale +
+    theme_classic() +
+    theme(axis.title.x = element_text(size = 14),
+          axis.title.y = element_text(size = 14),
+          plot.title   = element_text(hjust = 0.5)) +
+    labs(
+      title = paste0("PCA - Exp. Trial ", trial),
+      x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+      y = paste0("PC2 (", round(var_explained[2], 1), "%)")
+    )
+
+  outfile <- paste0("PCA/PCA_trial_", trial, ".png")
+  ggsave(outfile, plot = p, width = 10, height = 7, dpi = 300)
+  cat("  saved:", outfile, "\n")
+}
+```
+
+## Venn Diagram for called, filtered loci between groups (could use for year or population)
+Haven't updated this code yet just adding in if I want to come back to it later.
+Right now it doesn't seem like this will be that informative as most of my variation is driven by trial (7 groups)
+```{bash}
+
+# make sync files for each group 
+
+# extract the CHROM and POS of snps from each sync file 
+cut -f1,2 CASE.dp20.Block10.cov.sync > Block10.pos
+cut -f1,2 CASE.dp20.Block11.cov.sync > Block11.pos
+cut -f1,2 CASE.dp20.Block12.cov.sync > Block12.pos
+
+# count overlap between trials 
+cat <(echo "SNP") <(cat Block1*.pos | cut -f1,2 | sort | uniq -c | mawk '$1 <2' | mawk '{print $2"_"$3}') > singleton.loci
+```
+
+```{r}
+# Read and preprocess data
+B10.loci <- read.table("Block10.pos", header = TRUE)
+colnames(B10.loci) <- c("CHROM", "BP")
+B10.loci <- B10.loci %>% mutate(BLOCK_10 = TRUE)
+
+B11.loci <- read.table("Block11.pos", header = TRUE)
+colnames(B11.loci) <- c("CHROM", "BP")
+B11.loci <- B11.loci %>% mutate(BLOCK_11 = TRUE)
+
+B12.loci <- read.table("Block12.pos", header = TRUE)
+colnames(B12.loci) <- c("CHROM", "BP")
+B12.loci <- B12.loci %>% mutate(BLOCK_12 = TRUE)
+
+# Full join all data frames to preserve all CHROM and BP combinations
+pos_df <- B10.loci %>%
+  full_join(B11.loci %>% select(CHROM, BP, BLOCK_11), by = c("CHROM", "BP")) %>%
+  full_join(B12.loci %>% select(CHROM, BP, BLOCK_12), by = c("CHROM", "BP"))
+
+# Replace NA values in the BLOCK_* columns with FALSE
+pos_df <- pos_df %>%
+  mutate(
+    BLOCK_10 = ifelse(is.na(BLOCK_10), FALSE, BLOCK_10),
+    BLOCK_11 = ifelse(is.na(BLOCK_11), FALSE, BLOCK_11),
+    BLOCK_12 = ifelse(is.na(BLOCK_12), FALSE, BLOCK_12)
+  )
+
+
+loci.b10 <- nrow(subset(pos_df,BLOCK_10 == TRUE))
+loci.b11 <- nrow(subset(pos_df,BLOCK_11 == TRUE))
+loci.b12 <- nrow(subset(pos_df,BLOCK_12 == TRUE))
+
+loci.b10.b11 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_11 ==TRUE))
+loci.b10.b12 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_12 ==TRUE))
+loci.b11.b12 <- nrow(subset(pos_df,BLOCK_11 == TRUE & BLOCK_12 ==TRUE))
+loci.b10.b11.b12 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_11 ==TRUE & BLOCK_12 ==TRUE))
+
+png(filename="VenSNPs.png", type="cairo",units="px", width=4000, height=4000, res=500, bg="transparent")
+
+venn.plot <- draw.triple.venn(
+  area1=loci.b10, area2=loci.b11, area3=loci.b12, 
+  n12= loci.b10.b11, n13=loci.b10.b12, 
+  n23=loci.b11.b12,scaled=TRUE,
+  n123=loci.b10.b11.b12, cex=rep(2, 7),
+  category = c("Block 10", "Block 11", "Block 12"),
+  fill = cbPaletteSmall3,cat.cex = rep(2, 3),
+  cat.col = cbPaletteSmall3, label.col = rep("white", 7))
+dev.off()
+```
+
+
+
+# Population level outlier testing
+#### Set up files
+```{bash, eval=FALSE}
+source activate CADO
+
+bash ../Scripts/sum.sh <(cut -f1,2,3,13-16 CASE.dp20.Block10.cov.sync) > CASE.B10.IS.sync
+paste CASE.B10.IS.sync <(cut -f4 CASE.B10.IS.sync) <(cut -f4 CASE.B10.IS.sync)  > CASE.B10.ISsum3.sync
+
+AV_COV=$(mawk -f ../scripts/add_cov_sync <(cut -f13-16 --complement CASE.dp20.Block10.cov.sync) | mawk '{sum=sum+$21} END {print sum/NR}')
+
+echo $AV_COV
+
+mawk -f ../scripts/add_cov_sync CASE.B10.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x' | mawk '!/CHR/' | cut -f1-6 > CASE.B10.ISsum3nh.sync
+
+mawk -f ../scripts/add_cov_sync_IS CASE.B10.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x'> CASE.B10.ISsum3nh.cov.sync
+
+
+paste CASE.dp20.Block10.cov.sync <(mawk -f ../scripts/add_cov_sync CASE.B10.ISsum3.sync ) | mawk -v x=$AV_COV '$29 >= x' | cut -f1-22 > temp.sync
+
+mv temp.sync CASE.dp20.Block10.COV.sync
+#cp CASE.dp20.Block10.cov.sync CASE.dp20.Block10.COV.sync
+mawk -f ../scripts/add_cov_sync <(cut -f13-16,20- --complement CASE.dp20.Block10.COV.sync) > temp.cov
+
+
+paste temp.cov <(cut -f7 CASE.B10.ISsum3nh.cov.sync) | mawk -v OFS='\t' '{if ($18 > $19) {$18=$19; print $0} else {print $0}}' | cut -f1-18> CASE.dp20.Block10.COV
+```
+
+```{bash, eval=FALSE}
+source activate random_draw
+
+#python ../scripts/sub_sample.py CASE.dp20.Block10.COV CASE.B10.ISsum3nh.sync CASE.B10.ISs.sync
+python ../scripts/sub_sample.py CASE.B10.ISsum3nh.cov.sync CASE.B10.ISsum3nh.sync CASE.B10.ISs.sync
+
+cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3") CASE.B10.ISs.sync > CASE.B10.ISsum.sync
+
+paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f4 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f5 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f6 CASE.dp20.Block10.COV.sync)> CA.B10.sync
+
+head -1 CA.B10.sync
+
+mawk '!/CHR/' CA.B10.sync > CA.B10.input
+
+paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync)  <(cut -f7 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f8 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f9 CASE.dp20.Block10.COV.sync)> CASE.B10.sync
+
+head -1 CASE.B10.sync
+tail -n +2 CASE.B10.sync > CASE.B10.input
+
+
+paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f17 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f19 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f18 CASE.dp20.Block10.COV.sync) > SE.B10.sync
+
+head -1 SE.B10.sync
+tail -n +2 SE.B10.sync > SE.B10.input
+
+
+paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f10 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f11 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f12 CASE.dp20.Block10.COV.sync)> CON.B10.sync
+
+head -1 CON.B10.sync
+tail -n +2 CON.B10.sync | mawk '!/0:0:0:0:0:0/' > CON.B10.input
+```
+
+```{bash, eval=FALSE}
+source activate random_draw
+
+#python ../scripts/sub_sample.py CASE.dp20.Block12.COV CASE.B12.ISsum4nh.sync CASE.B12.ISs.sync
+python ../scripts/sub_sample.py CASE.B12.ISsum4nh.cov.sync CASE.B12.ISsum4nh.sync CASE.B12.ISs.sync
+
+cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3\tIS_R4") CASE.B12.ISs.sync > CASE.B12.ISsum.sync
+
+paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f4 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 5 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f6 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f7 CASE.dp20.Block12.COV.sync) > CA.B12.sync
+
+head -1 CA.B12.sync
+tail -n +2 CA.B12.sync > CA.B12.input
+
+paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f8 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 9 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f10 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f11 CASE.dp20.Block12.COV.sync) > CASE.B12.sync
+
+head -1 CASE.B12.sync
+tail -n +2 CASE.B12.sync > CASE.B12.input
+
+paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f20 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 21 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f22 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f23 CASE.dp20.Block12.COV.sync) > SE.B12.sync
+
+head -1 SE.B12.sync
+tail -n +2 SE.B12.sync > SE.B12.input
+
+paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f12 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 13 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f14 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f15 CASE.dp20.Block12.COV.sync) > CON.B12.sync
+
+head -1 CON.B12.sync
+tail -n +2 CON.B12.sync > CON.B12.input
 
 ```

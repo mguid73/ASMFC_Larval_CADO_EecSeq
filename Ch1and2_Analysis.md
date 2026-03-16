@@ -409,14 +409,56 @@ bcftools query -l CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz > samples
 ## Create Sync file
 Filtered for missing data less than 10% and MAF of > 0.015 based on read counts using VCF file first then filters by sites with 2-4 alleles and outputs filtered sites in a compressed VCF.
 
-Can also conver to bed file with SNP coordinates and assign gene annotations to these gene IDs
 ```{bash, eval=FALSE}
 source activate CADO
 
-cd ../raw.vcf
-# filters for missing data less than 10%, MAF of >0.015 based on read counts and filters by sites with 2-4 alleles then outputs a compressed VCF
-bcftools view CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' -O z -o SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz
+# filter and pull positions of CHAPTER 1 variants from vcf
+bcftools view -S <(grep -E '^(ARC|NEH|MV)' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > Chapter1.pos
 
+# check length
+cat Chapter1.pos | wc -l
+#output: 527518
+
+# filter and pull positions of CHAPTER 1 **ARC** variants from vcf
+bcftools view -S <(grep -E '^ARC' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > ARC.pos
+
+# filter and pull positions of CHAPTER 1 **NEH** variants from vcf
+bcftools view -S <(grep -E '^NEH' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > NEH.pos
+
+# filter and pull positions of CHAPTER 1 **MV** variants from vcf
+bcftools view -S <(grep -E '^MV' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > MV.pos
+
+
+# filter and pull positions of CHAPTER 2 variants from vcf
+bcftools view -S <(grep -E '^(VC|VS|CC|CS|CON|STR)' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > Chapter2.pos
+
+# check length
+cat Chapter2.pos | wc -l
+# output: 475478
+
+ll *.pos #confirm files that end in pos
+
+#read pos files, sorts lines, and uniq removes the duplicated lines while retaining all of the sites from each chapter position file
+cat ARC.pos NEH.pos MV.pos Chapter2.pos | sort | uniq > fil.pos
+
+#check out number of sites retained in each position file
+wc -l ARC.pos NEH.pos MV.pos Chapter1.pos Chapter2.pos fil.pos
+  #587308 ARC.pos
+  #339468 NEH.pos
+  #664287 MV.pos
+  #527518 Chapter1.pos
+  #475478 Chapter2.pos
+    #1068773 fil.pos
+    #3662832 total
+
+# output filtered vcf - this takes a bit to run (1hr)
+bcftools view -R fil.pos --threads 40 -m2 -M 4 CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz -O z -o SNP.CADO.TRSdp.20.B90.2a.perp.bypop.vcf.gz
+```
+
+
+Can also convert to bed file with SNP coordinates and assign gene annotations to these gene IDs
+```{bash, eval=FALSE}
+source activate CADO
 # converts final VCF to BED file of SNP coordinates (0-based start, 1-based end)
 #bcftools view --threads 40 SNP.CASE.TRSdp.20.B90.2a.perp.vcf.gz | mawk '!/#/' | cut -f 1,2 | mawk '{print $1"\t"$2-1"\t"$2}' > total.snp.bed
 
@@ -425,43 +467,26 @@ bcftools view CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1
 ```
 
 > NOTE: Because the previous filtering script didn't separate InDels from SNPs with pooled data,
-> the filtered variant call file (VCF) I have here are loci that have 4 alleles or less. 
+> the filtered variant call file (VCF) I have here are loci that have 4 alleles or less (despite the file name)
 > These can be a mixture of SNP, InDels, and complex mutations. 
->
-> see below for filtering to just snps with `bcftools view --type snps` to get the conversion from vcf to sync file to work
 
 ### Create Sync files
 ```{bash, eval=FALSE}
 source activate CADO
 
-bcftools view --threads 40 ../raw.vcf/SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
-bcftools view --type snps -m2 -M2 temp.vcf -o temp_snps.vcf
+#problem code - because the literal string did not match the missing data string from FreeBayes what was in my vcf  
+#bcftools view --threads 40 ../raw.vcf/SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
+
+# changing missing genotype coding with regex instead of literal string recogniztion - this should be more fool proof (thanks to Jon for catching & fixing this!!)
+bcftools view --threads 40 ../raw.vcf/SNP.CADO.TRSdp.20.B90.2a.perp.bypop.vcf.gz \
+  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i ~ /^(\.:)*\.$/) $i="."; print }' > temp.vcf
 
 # convert to sync file
-python2 ../../Scripts/VCFtoPopPool.py temp_snps.vcf Larval.snps.sync 
+python2 ../../Scripts/VCFtoPopPool.py temp.vcf Larval.BothChapters.sync 
 
-# pull positions of CHAPTER 1 SNPs from vcf file
-bcftools view -S <(grep -E '^(ARC|NEH|MV)' samples) temp_snps.vcf | bcftools query -f '%CHROM\t%POS\n' > Chapter1.Larval.pos
-
-# pull positions of CHAPTER 2 SNPs from vcf file
-bcftools view -S <(grep -E '^(VC|VS|CC|CS|CON|STR)' samples) temp_snps.vcf | bcftools query -f '%CHROM\t%POS\n' > Chapter2.Larval.pos
-
-#rm temp.vcf temp_snps.vcf
+#rm temp.vcf
 ```
 
-I added in the `--type snps` line because I was running into the error below. I believe this error arose from issues with the way the VCFtoPopPool.py script was dealing with complex haplotypes. I think where the script was randomly assigning a nucleotide to complex haplotypes lead to a mismatch in the OBS and n variables. When I got the error, the script still generated a sync file, however I think it was truncated as it was much smaller in size than the sync file generated after running the snp filter.
-
---type snps removes indels and MNPs, which are the most common sources of malformed or inconsistent allele/count fields in FreeBayes output
--m2 -M2 enforces strictly biallelic sites, so alleles is always exactly [REF, ALT1] — a length-2 list, and OBS = RO + AO will always also be length 2, so n never exceeds the bounds of OBS
-```{bash, eval=FALSE}
-#note - Larval.sync file is the truncated result of the vcf->sync converstion of the full vcf with complex haplotypes
-(CADO) python2 ../../Scripts/VCFtoPopPool.py temp.vcf Larval.sync 
-91
-Traceback (most recent call last):
-  File "../../Scripts/VCFtoPopPool.py", line 110, in <module>
-    a[z[alleles[n]]]=OBS[n]
-IndexError: list index out of range
-```
 
 ### This sort is to maintain reproducibility across older analysis
 ```{bash}
@@ -478,44 +503,73 @@ mawk 'BEGIN {OFS="\t"
     order["NC_035787.1"] = 9
     order["NC_035788.1"] = 10
 }
-{ print order[$1], $2, NR, $0 }' Larval.snps.sync | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test.sync
+{ print order[$1], $2, NR, $0 }' Larval.BothChapters.sync  | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test.sync
 
-mv test.sync Larval.snps.sync
+mv test.sync Larval.BothChapters.sync 
 ```
 
-## Split sync files by project with positional lookup***
+## Split sync files by CHAPTER with positional lookup***
 ```{bash}
-cat <(echo -e "CHROM\tPOS") Chapter1.Larval.pos > Ch1.head.pos
-cat <(echo -e "CHROM\tPOS") Chapter2.Larval.pos > Ch2.head.pos
+cat <(echo -e "CHROM\tPOS") Chapter1.pos > Ch1.head.pos
+cat <(echo -e "CHROM\tPOS") ARC.pos > ARC.head.pos
+cat <(echo -e "CHROM\tPOS") NEH.pos > NEH.head.pos
+cat <(echo -e "CHROM\tPOS") MV.pos > MV.head.pos
 
-# Chapter 1: ARC2, NEH, MV populations - with positional look up ***
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.snps.sync \
+cat <(echo -e "CHROM\tPOS") Chapter2.pos > Ch2.head.pos
+
+# Chapter 1: all populations 
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.BothChapters.sync \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(ARC|NEH|MV)/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
-  > Chapter1.Larval.snps.sync
+  > Chapter1.Larval.sync
+
+
+# Chapter 1 ARC population - use ARC.head.pos
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' ARC.head.pos Larval.BothChapters.sync \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^ARC/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > ARC.Larval.sync
+
+# Chapter 1 NEH population - use NEH.head.pos
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' NEH.head.pos Larval.BothChapters.sync \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^NEH/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > NEH.Larval.sync
+
+# Chapter 1 MV population - use MV.head.pos
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' MV.head.pos Larval.BothChapters.sync \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^MV/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > MV.Larval.sync
 
 
 # Chapter 2: VC, VS, CC, CS, CON, STR populations - with positional look up ***
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch2.head.pos Larval.snps.sync \
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch2.head.pos Larval.BothChapters.sync  \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(VC|VS|CC|CS|CON|STR)/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
-  > Chapter2.Larval.snps.sync
+  > Chapter2.Larval.sync
 
 
 # Count samples per file (subtract 3 for CHROM, POS, REF)
-head -1 Chapter1.Larval.snps.sync | tr '\t' '\n' | wc -l  
+head -1 Chapter1.Larval.sync | tr '\t' '\n' | wc -l  
 # output = 66 -3 = 63 samples = 9 samples/exp * 7 exp = 63 samples (looks good!)
-head -1 Chapter2.Larval.snps.sync | tr '\t' '\n' | wc -l
+head -1 Chapter2.Larval.sync | tr '\t' '\n' | wc -l
 # output = 31 - 3 = 28 samples = 14 samples/probeset * 2 probesets = 28 (looks good!)
-head -1 Larval.snps.sync | tr '\t' '\n' | wc -l
+head -1 Larval.BothChapters.sync| tr '\t' '\n' | wc -l
 # output = 94 -3 = 91 samples 
 # 63+28 = 91 (all good)
 
 #check out column names for each sync file
-head -1 Chapter1.Larval.snps.sync | tr '\t' '\n'
-head -1 Chapter2.Larval.snps.sync | tr '\t' '\n'
+head -1 Chapter1.Larval.sync | tr '\t' '\n'
+head -1 Chapter2.Larval.sync | tr '\t' '\n'
 ```
 
 ## CHAPTER 1 - Add coverage stats to sync file and filter by minimum and mean coverage
@@ -523,7 +577,7 @@ head -1 Chapter2.Larval.snps.sync | tr '\t' '\n'
 source activate CADO
 
 # add coverage stats to each sync file and check those out to decide on depth limits
-mawk -f ../../Scripts/add_cov_sync.txt Chapter1.Larval.snps.sync > Ch1.cov.sync
+mawk -f ../../Scripts/add_cov_sync.txt Chapter1.Larval.sync > Ch1.cov.sync
 mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' Ch1.cov.sync > Ch1.coverage_stats.txt
 
 #check column index numbers
@@ -536,18 +590,90 @@ mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' Ch1.cov.sync
 mawk '$67 > 9 && $69 > 24' Ch1.cov.sync > Ch1.dp25.cov.sync
 
 cat Ch1.cov.sync | wc -l 
-# 146,537
+# 517,115
 cat Ch1.dp25.cov.sync | wc -l 
-# 98,680
+# 363,423
 ```
-Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (47,857 snps removed).
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (153,692 snps removed).
+
+## CHAPTER 1 **ARC** - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt ARC.Larval.sync > ARC.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' ARC.cov.sync > ARC.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ARC.cov.sync
+# 13 MIN_COV
+# 14 MAX_COV
+# 15 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$13 > 9 && $15 > 24' ARC.cov.sync > ARC.dp25.cov.sync
+
+cat ARC.cov.sync | wc -l 
+# 587,309
+cat ARC.dp25.cov.sync | wc -l 
+# 586,626
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (683 snps removed).
+
+## CHAPTER 1 **NEH** - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt NEH.Larval.sync > NEH.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' NEH.cov.sync > NEH.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' NEH.cov.sync
+# 31 MIN_COV
+# 32 MAX_COV
+# 33 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$31 > 9 && $33 > 24' NEH.cov.sync > NEH.dp25.cov.sync
+
+cat NEH.cov.sync | wc -l 
+# 339,436
+cat NEH.dp25.cov.sync | wc -l 
+# 287,502
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (51,934 snps removed).
+
+## CHAPTER 1 **MV** - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt MV.Larval.sync > MV.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' MV.cov.sync > MV.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' MV.cov.sync
+# 31 MIN_COV
+# 32 MAX_COV
+# 33 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$31 > 9 && $33 > 24' MV.cov.sync > MV.dp25.cov.sync
+
+cat MV.cov.sync | wc -l 
+# 664,250
+cat MV.dp25.cov.sync | wc -l 
+# 652,115
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (121,135 snps removed).
 
 ## CHAPTER 2 - Add coverage stats to sync file and filter by minimum and mean coverage
 ```{bash, eval=FALSE}
 source activate CADO
 
 # add coverage stats to each sync file and check those out to decide on depth limits
-mawk -f ../../Scripts/add_cov_sync.txt Chapter2.Larval.snps.sync > Ch2.cov.sync
+mawk -f ../../Scripts/add_cov_sync.txt Chapter2.Larval.sync > Ch2.cov.sync
 mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' Ch2.cov.sync > Ch2.coverage_stats.txt
 
 #check column index numbers
@@ -560,11 +686,11 @@ mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' Ch2.cov.sync
 mawk '$32 > 9 && $34 > 24' Ch2.cov.sync > Ch2.dp25.cov.sync
 
 cat Ch2.cov.sync | wc -l 
-# 146,537
+# 475,479
 cat Ch2.dp25.cov.sync | wc -l 
-# 145,530
+# 473526
 ```
-Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (1,007 snps removed).
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (1,953 snps removed).
 
 
 could also filter coverage for the combined chapter 1 & 2 sync file, but I didn't need to
@@ -575,7 +701,7 @@ could also filter coverage for the combined chapter 1 & 2 sync file, but I didn'
 ## REMAINING ANALYSES IN R!
 
 ### Chapter 1 filtered sync file
-`Ch1.dp25.cov.sync` copied into 1_Larval-CADO Analysis directory
+`Ch1.dp25.cov.sync` & population sync files copied into 1_Larval-CADO Analysis directory
 
 ### Chapter 2 filtered sync file
 `Ch2.dp25.cov.sync` copied into 2_Vibrio-Challenge Analysis directory
@@ -583,8 +709,3 @@ could also filter coverage for the combined chapter 1 & 2 sync file, but I didn'
 
 See ____.Rmd
 _________________________________________________________
-
-
-# QUESTIONS FOR JON:
-- look at --type snps filtering step
-- why are there the same number of loci in each chapter sync file before filtering for coverage? I only pulled the sites specific to each chapter but the .pos files seem to be the same?
