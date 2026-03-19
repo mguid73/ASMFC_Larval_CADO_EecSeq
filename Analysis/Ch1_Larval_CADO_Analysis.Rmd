@@ -98,7 +98,12 @@ group_and_average <- function(df) {
 ```
 
 ```{r include=TRUE}
-cbPaletteSmall <- c("purple", "green", "gold", "red", "orange", "blue", "violet")
+#cbPaletteSmall <- c("purple", "green", "gold", "red", "orange", "blue", "violet")
+cbPaletteSmall <- c("#3F8F7A", "#D3DDF0", "#4169E1", "#5F7BAA", "#F3D6D9", "#8C3A41", "hotpink")
+
+cbPaletteSmall3 <- c("#3F8F7A", "#D8848A", "#5F7BAA")
+
+treatPalette <- c("#A29BAD", "#4CAF72", "#D29F13")
 ```
 
 ```{r}
@@ -183,7 +188,7 @@ pca_df$Treatment <- meta$treatment
 pca_df$Trial <- meta$trial
 
 pca_rand10k <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Trial, fill=Trial)) +
-  geom_point(aes(alpha=0.2), size =4,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
+  geom_point(aes(alpha=1), size =6,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
 guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
   theme_minimal() +
   labs(
@@ -219,7 +224,7 @@ pca_i_df$Treatment <- t0_meta$treatment
 pca_i_df$Trial <- t0_meta$trial
 
 pca_t0rand10k<- ggplot(pca_i_df, aes(x = PC1, y = PC2, color = Trial, fill=Trial)) +
-  geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
+  geom_point(aes(alpha=0.2), size =6,shape=21, col="black")+  scale_fill_manual(values=cbPaletteSmall,name="Exp. Trial")+ 
 guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
   theme_classic() +
   labs(
@@ -284,8 +289,8 @@ for (pop in pops) {
   var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
 
   # palette for treatment or population; here color by treatment
-  if (exists("cbPaletteSmall")) {
-    fill_scale <- scale_fill_manual(values = cbPaletteSmall, name = "Treatment")
+  if (exists("treatPalette")) {
+    fill_scale <- scale_fill_manual(values = treatPalette, name = "Treatment")
   } else {
     fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
   }
@@ -364,8 +369,8 @@ for (trial in trials) {
   var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
 
   # palette for treatment or population; here color by treatment
-  if (exists("cbPaletteSmall")) {
-    fill_scale <- scale_fill_manual(values = cbPaletteSmall, name = "Treatment")
+  if (exists("treatPalette")) {
+    fill_scale <- scale_fill_manual(values = treatPalette, name = "Treatment")
   } else {
     fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
   }
@@ -390,159 +395,1151 @@ for (trial in trials) {
 }
 ```
 
-## Venn Diagram for called, filtered loci between groups (could use for year or population)
+## Venn Diagram for called, filtered loci between populations
 Haven't updated this code yet just adding in if I want to come back to it later.
 Right now it doesn't seem like this will be that informative as most of my variation is driven by trial (7 groups)
 ```{bash}
-
-# make sync files for each group 
-
 # extract the CHROM and POS of snps from each sync file 
-cut -f1,2 CASE.dp20.Block10.cov.sync > Block10.pos
-cut -f1,2 CASE.dp20.Block11.cov.sync > Block11.pos
-cut -f1,2 CASE.dp20.Block12.cov.sync > Block12.pos
+cut -f1,2 ARC.dp25.cov.sync > ARC.pos
+cut -f1,2 NEH.dp25.cov.sync > NEH.pos
+cut -f1,2 MV.dp25.cov.sync > MV.pos
 
 # count overlap between trials 
-cat <(echo "SNP") <(cat Block1*.pos | cut -f1,2 | sort | uniq -c | mawk '$1 <2' | mawk '{print $2"_"$3}') > singleton.loci
+cat <(echo "SNP") <(cat *.pos | cut -f1,2 | sort | uniq -c | mawk '$1 <2' | mawk '{print $2"_"$3}') > singleton.loci
 ```
 
 ```{r}
 # Read and preprocess data
-B10.loci <- read.table("Block10.pos", header = TRUE)
-colnames(B10.loci) <- c("CHROM", "BP")
-B10.loci <- B10.loci %>% mutate(BLOCK_10 = TRUE)
+ARC.loci <- read.table("ARC.pos", header = TRUE)
+colnames(ARC.loci) <- c("CHROM", "BP")
+ARC.loci <- ARC.loci %>% mutate(ARC = TRUE)
 
-B11.loci <- read.table("Block11.pos", header = TRUE)
-colnames(B11.loci) <- c("CHROM", "BP")
-B11.loci <- B11.loci %>% mutate(BLOCK_11 = TRUE)
+NEH.loci <- read.table("NEH.pos", header = TRUE)
+colnames(NEH.loci) <- c("CHROM", "BP")
+NEH.loci <- NEH.loci %>% mutate(NEH = TRUE)
 
-B12.loci <- read.table("Block12.pos", header = TRUE)
-colnames(B12.loci) <- c("CHROM", "BP")
-B12.loci <- B12.loci %>% mutate(BLOCK_12 = TRUE)
+MV.loci <- read.table("MV.pos", header = TRUE)
+colnames(MV.loci) <- c("CHROM", "BP")
+MV.loci <- MV.loci %>% mutate(MV = TRUE)
 
 # Full join all data frames to preserve all CHROM and BP combinations
-pos_df <- B10.loci %>%
-  full_join(B11.loci %>% select(CHROM, BP, BLOCK_11), by = c("CHROM", "BP")) %>%
-  full_join(B12.loci %>% select(CHROM, BP, BLOCK_12), by = c("CHROM", "BP"))
+pos_df <- ARC.loci %>%
+  full_join(NEH.loci %>% select(CHROM, BP, NEH), by = c("CHROM", "BP")) %>%
+  full_join(MV.loci %>% select(CHROM, BP, MV), by = c("CHROM", "BP"))
 
 # Replace NA values in the BLOCK_* columns with FALSE
 pos_df <- pos_df %>%
   mutate(
-    BLOCK_10 = ifelse(is.na(BLOCK_10), FALSE, BLOCK_10),
-    BLOCK_11 = ifelse(is.na(BLOCK_11), FALSE, BLOCK_11),
-    BLOCK_12 = ifelse(is.na(BLOCK_12), FALSE, BLOCK_12)
+    ARC = ifelse(is.na(ARC), FALSE, ARC),
+    NEH = ifelse(is.na(NEH), FALSE, NEH),
+    MV = ifelse(is.na(MV), FALSE, MV)
   )
 
 
-loci.b10 <- nrow(subset(pos_df,BLOCK_10 == TRUE))
-loci.b11 <- nrow(subset(pos_df,BLOCK_11 == TRUE))
-loci.b12 <- nrow(subset(pos_df,BLOCK_12 == TRUE))
+loci.arc <- nrow(subset(pos_df,ARC == TRUE))
+loci.neh <- nrow(subset(pos_df,NEH == TRUE))
+loci.mv <- nrow(subset(pos_df,MV == TRUE))
 
-loci.b10.b11 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_11 ==TRUE))
-loci.b10.b12 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_12 ==TRUE))
-loci.b11.b12 <- nrow(subset(pos_df,BLOCK_11 == TRUE & BLOCK_12 ==TRUE))
-loci.b10.b11.b12 <- nrow(subset(pos_df,BLOCK_10 == TRUE & BLOCK_11 ==TRUE & BLOCK_12 ==TRUE))
+loci.arc.neh <- nrow(subset(pos_df,ARC == TRUE & NEH ==TRUE))
+loci.arc.mv <- nrow(subset(pos_df,ARC == TRUE & MV ==TRUE))
+loci.neh.mv <- nrow(subset(pos_df,NEH == TRUE & MV ==TRUE))
+loci.arc.neh.mv <- nrow(subset(pos_df,ARC == TRUE & NEH ==TRUE & MV ==TRUE))
 
-png(filename="VenSNPs.png", type="cairo",units="px", width=4000, height=4000, res=500, bg="transparent")
+png(filename="Venn_variants.png", type="cairo",units="px", width=4000, height=4000, res=500, bg="transparent")
 
 venn.plot <- draw.triple.venn(
-  area1=loci.b10, area2=loci.b11, area3=loci.b12, 
-  n12= loci.b10.b11, n13=loci.b10.b12, 
-  n23=loci.b11.b12,scaled=TRUE,
-  n123=loci.b10.b11.b12, cex=rep(2, 7),
-  category = c("Block 10", "Block 11", "Block 12"),
-  fill = cbPaletteSmall3,cat.cex = rep(2, 3),
+  area1=loci.arc, area2=loci.neh, area3=loci.mv, 
+  n12= loci.arc.neh, n13=loci.arc.mv, 
+  n23=loci.neh.mv,scaled=TRUE,
+  n123=loci.arc.neh.mv, cex=rep(2, 7),
+  category = c("ARC", "NEH", "MV"),
+  fill = cbPaletteSmall3, cat.cex = rep(2, 3),
   cat.col = cbPaletteSmall3, label.col = rep("white", 7))
 dev.off()
+
 ```
 
 
 
 # Population level outlier testing
-#### Set up files
+
+## ARC
+
+First normalize with initial sample coverage. The core logic is that the internal standard (IS) pools (the inital samples) act as a reference to normalize and cap coverage, ensuring that outlier detection downstream isn't driven by coverage artifacts rather than true allele frequency signals.
 ```{bash, eval=FALSE}
 source activate CADO
 
-bash ../Scripts/sum.sh <(cut -f1,2,3,13-16 CASE.dp20.Block10.cov.sync) > CASE.B10.IS.sync
-paste CASE.B10.IS.sync <(cut -f4 CASE.B10.IS.sync) <(cut -f4 CASE.B10.IS.sync)  > CASE.B10.ISsum3.sync
+#sum up initial samples
+bash ../Scripts/sum.sh <(cut -f1,2,3,10-12 ARC.dp25.cov.sync) > ARC.IS.sync
+# makes extra columns with the sum data
+paste ARC.IS.sync <(cut -f4 ARC.IS.sync) <(cut -f4 ARC.IS.sync)  > ARC.ISsum3.sync
 
-AV_COV=$(mawk -f ../scripts/add_cov_sync <(cut -f13-16 --complement CASE.dp20.Block10.cov.sync) | mawk '{sum=sum+$21} END {print sum/NR}')
+# look at what col number to put in the compute average step next 
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ARC.dp25.cov.sync
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12 --complement ARC.dp25.cov.sync) > ARC.sansIS.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ARC.sansIS.cov.sync # last column is 15 (mean coverage w/o initial samples)
 
+# compute average coverage on sync file minus initial samples
+AV_COV=$(mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12 --complement ARC.dp25.cov.sync) | mawk '{sum=sum+$15} END {print sum/NR}')
 echo $AV_COV
 
-mawk -f ../scripts/add_cov_sync CASE.B10.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x' | mawk '!/CHR/' | cut -f1-6 > CASE.B10.ISsum3nh.sync
+mawk -f ../Scripts/add_cov_sync.txt ARC.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x' | mawk '!/CHR/' | cut -f1-6 > ARC.ISsum3nh.sync
 
-mawk -f ../scripts/add_cov_sync_IS CASE.B10.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x'> CASE.B10.ISsum3nh.cov.sync
+mawk -f ../Scripts/add_cov_sync_IS.txt ARC.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x'> ARC.ISsum3nh.cov.sync
 
+# apply coverage filter back to main sync
 
-paste CASE.dp20.Block10.cov.sync <(mawk -f ../scripts/add_cov_sync CASE.B10.ISsum3.sync ) | mawk -v x=$AV_COV '$29 >= x' | cut -f1-22 > temp.sync
+#first check col number to apply filter to
+paste ARC.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt ARC.ISsum3.sync ) > ISnormARC.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ISnormARC.cov.sync # col 24 (mean cov normalized by initial samples)
 
-mv temp.sync CASE.dp20.Block10.COV.sync
-#cp CASE.dp20.Block10.cov.sync CASE.dp20.Block10.COV.sync
-mawk -f ../scripts/add_cov_sync <(cut -f13-16,20- --complement CASE.dp20.Block10.COV.sync) > temp.cov
+# apply initial sample coverage filter
+paste ARC.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt ARC.ISsum3.sync ) | mawk -v x=$AV_COV '$24 >= x' | cut -f1-15 > temp.sync
 
+# ARC samples normalized by initial sample coverage stored in *COV.sync
+mv temp.sync ARC.dp25.COV.sync
+#cp ARC.dp25.cov.sync ARC.dp25.COV.sync
 
-paste temp.cov <(cut -f7 CASE.B10.ISsum3nh.cov.sync) | mawk -v OFS='\t' '{if ($18 > $19) {$18=$19; print $0} else {print $0}}' | cut -f1-18> CASE.dp20.Block10.COV
+# cap coverage at IS maxiumum
+
+#remove inital samples and remove old cov stats and recalculates the coverage with only treatment pools
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,13- --complement ARC.dp25.COV.sync) > temp.cov
+
+# pastes pop coverage with minimum inital sample coverage (col 7) to last col (13) if temp.cov and compare treatemtn pool mean cov ($12) to IS min cov ($13)
+paste temp.cov <(cut -f7 ARC.ISsum3nh.cov.sync) | mawk -v OFS='\t' '{if ($12 > $13) {$12=$13; print $0} else {print $0}}' | cut -f1-12> ARC.dp25.COV
 ```
+The final output is ARC.dp25.COV, a fully processed, coverage-normalized sync ready for outlier detection.
+
+
+```{bash, eval=FALSE}
+source activate randowm_draw
+
+# subsampling the internal standard 
+#python ../scripts/sub_sample.py ARC.dp25.COV ARC.ISsum3nh.sync ARC.ISs.sync
+python ../Scripts/sub_sample.py ARC.ISsum3nh.cov.sync ARC.ISsum3nh.sync ARC.ISs.sync
+
+# add heading
+cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3") ARC.ISs.sync > ARC.ISsum.sync
+
+# building treatment specific input files (interleaved with IS columns)
+#these IS columns will serve as the null expectation during outlier detection
+
+# Control columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 ARC.ISsum.sync) <(cut -f4 ARC.dp25.COV.sync) \
+      <(cut -f5 ARC.ISsum.sync) <(cut -f5 ARC.dp25.COV.sync) \
+      <(cut -f6 ARC.ISsum.sync) <(cut -f6 ARC.dp25.COV.sync)> ARC.CON.sync
+
+head -1 ARC.CON.sync
+tail -n +2 ARC.CON.sync > ARC.CON.input
+
+# Stress columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 ARC.ISsum.sync)  <(cut -f7 ARC.dp25.COV.sync) \
+      <(cut -f5 ARC.ISsum.sync) <(cut -f8 ARC.dp25.COV.sync) \
+      <(cut -f6 ARC.ISsum.sync) <(cut -f9 ARC.dp25.COV.sync)> ARC.STR.sync
+
+head -1 ARC.STR.sync
+tail -n +2 ARC.STR.sync > ARC.STR.input
+```
+
+### Calculate P-values - ARC
+#### Modified CMH - ARC population
+
+Reads in the interleaved IS+treatment sync files into R and runs an adapted Cochran-Mantel-Haenszel (CMH) test to identify loci where allele frequencies shift significantly between initial samples and treatment pools.
+
+Reading and parsing files - read.sync() requires a headerless input file
+```{r}
+# gen assigns each column a "generation," where 0 = IS (baseline) and 1 = treatment pool
+# repl  pairs each IS replicate with its corresponding treatment pool as replicate 1, 2, and 3
+# coverage() and af() extract per-locus read depth and allele frequencies from the parsed sync object, which are passed directly to the test.
+
+#stress
+str.arc.sync <- read.sync(file="ARC.STR.input", gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+str.arc.cov <- coverage(str.arc.sync,gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+str.arc.af <- af(str.arc.sync,gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+
+#control
+con.arc.sync <- read.sync(file="ARC.CON.input", gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+con.arc.cov <- coverage(con.arc.sync,gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+con.arc.af <- af(con.arc.sync,gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3))
+```
+
+#### Running adapted CMH test
+The adapted CMH is a replicated test of allele frequency change — it asks whether allele frequencies shifted consistently across all 3 IS→treatment replicate pairs. **The parameters matter a lot here:**
+- Ne=rep(250, 3) — effective population size of 250 per replicate, used to correct for genetic drift
+  - estimated Ne to be around 400 because this is 1000x less than starting pool size of 400,000 larv per bucket and 100x less than 40,000 larv per initial sample
+- poolSize=rep(c(40000, 10000), ...) — pool sizes alternating between IS (40,000 larvae) and treatment (40,000 larvae), used for appropriate variance correction
+- MeanStart=TRUE — uses the mean IS allele frequency across replicates as the baseline rather than each IS independently
+- mincov=20 — excludes loci with coverage below 20x in any pool, preventing low-coverage noise from driving false positives
+```{r}
+#stress
+str.arc.pvals <- adapted.cmh.test(freq=str.arc.af, coverage=str.arc.cov,
+                                  Ne=rep(400, 3), gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3),
+                                  poolSize=rep(c(40000,40000), ncol(str.arc.af)/2), MeanStart = TRUE, mincov =20)
+
+pstrdf <- as.data.table(cbind(row.names(str.arc.af),str.arc.pvals))
+colnames(pstrdf) <- c("Locus","PVAL")
+pstrdf$GROUP <- "PSTR"
+
+#control
+con.arc.pvals <- adapted.cmh.test(freq=con.arc.af, coverage=con.arc.cov,
+                                  Ne=rep(400, 3), gen=c(0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3),
+                                  poolSize=rep(c(40000,40000), ncol(con.arc.af)/2), MeanStart = TRUE, mincov =20)
+
+pcondf <- as.data.table(cbind(row.names(con.arc.af),con.arc.pvals))
+colnames(pcondf) <- c("Locus","PVAL")
+pcondf$GROUP <- "PCON"
+
+# build p value
+ARC.pval.table <- bind_rows(pcondf, pstrdf)
+ARC.pval.table <- ARC.pval.table %>%
+  separate(Locus, into = c("CHROM", "BP"), sep = "\\.(?=[^.]+$)")
+ARC.pval.table$PVAL <- as.numeric(ARC.pval.table$PVAL)
+```
+
+
+
+## NEH
+First normalize with initial sample coverage. The core logic is that the internal standard (IS) pools (the inital samples) act as a reference to normalize and cap coverage, ensuring that outlier detection downstream isn't driven by coverage artifacts rather than true allele frequency signals.
+```{bash, eval=FALSE}
+source activate CADO
+
+#sum up initial samples
+bash ../Scripts/sum.sh <(cut -f1,2,3,10-12,19-21,28-30 NEH.dp25.cov.sync) > NEH.IS.sync
+# makes extra columns with the sum data
+paste NEH.IS.sync <(cut -f4 NEH.IS.sync) <(cut -f4 NEH.IS.sync)  > NEH.ISsum3.sync
+
+# look at what col number to put in the compute average step next 
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' NEH.dp25.cov.sync
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28-30 --complement NEH.dp25.cov.sync) > NEH.sansIS.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' NEH.sansIS.cov.sync # last column is 27 (mean coverage w/o initial samples)
+
+# compute average coverage on sync file minus initial samples
+AV_COV=$(mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28-30 --complement NEH.dp25.cov.sync) | mawk '{sum=sum+$27} END {print sum/NR}')
+echo $AV_COV
+
+mawk -f ../Scripts/add_cov_sync.txt NEH.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x' | mawk '!/CHR/' | cut -f1-6 > NEH.ISsum3nh.sync
+
+mawk -f ../Scripts/add_cov_sync_IS.txt NEH.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x'> NEH.ISsum3nh.cov.sync
+
+# apply coverage filter back to main sync
+
+#first check col number to apply filter to
+paste NEH.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt NEH.ISsum3.sync ) > ISnormNEH.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ISnormNEH.cov.sync # col 42 (mean cov normalized by initial samples)
+
+# apply initial sample coverage filter
+paste NEH.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt NEH.ISsum3.sync ) | mawk -v x=$AV_COV '$42 >= x' | cut -f1-33 > temp.sync
+
+# NEH samples normalized by initial sample coverage stored in *COV.sync
+mv temp.sync NEH.dp25.COV.sync
+#cp NEH.dp25.cov.sync NEH.dp25.COV.sync
+
+# cap coverage at IS maxiumum
+
+#remove inital samples and remove old cov stats and recalculates the coverage with only treatment pools
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28- --complement NEH.dp25.COV.sync) > temp.cov
+
+# pastes pop coverage with minimum inital sample coverage (col 7) to last col (25) of temp.cov and compare treatemtn pool mean cov ($24) to IS min cov ($25)
+paste temp.cov <(cut -f7 NEH.ISsum3nh.cov.sync) | mawk -v OFS='\t' '{if ($24 > $25) {$24=$25; print $0} else {print $0}}' | cut -f1-24> NEH.dp25.COV
+```
+The final output is NEH.dp25.COV, a fully processed, coverage-normalized sync ready for outlier detection.
+
 
 ```{bash, eval=FALSE}
 source activate random_draw
 
-#python ../scripts/sub_sample.py CASE.dp20.Block10.COV CASE.B10.ISsum3nh.sync CASE.B10.ISs.sync
-python ../scripts/sub_sample.py CASE.B10.ISsum3nh.cov.sync CASE.B10.ISsum3nh.sync CASE.B10.ISs.sync
+# subsampling the internal standard 
+#python ../scripts/sub_sample.py NEH.dp25.COV NEH.ISsum3nh.sync NEH.ISs.sync
+python ../Scripts/sub_sample.py NEH.ISsum3nh.cov.sync NEH.ISsum3nh.sync NEH.ISs.sync
 
-cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3") CASE.B10.ISs.sync > CASE.B10.ISsum.sync
+# add heading
+cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3") NEH.ISs.sync > NEH.ISsum.sync
 
-paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f4 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f5 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f6 CASE.dp20.Block10.COV.sync)> CA.B10.sync
+# building treatment specific input files (interleaved with IS columns)
+#these IS columns will serve as the null expectation during outlier detection
 
-head -1 CA.B10.sync
+# Control columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 NEH.ISsum.sync) <(cut -f4 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f5 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f6 NEH.dp25.COV.sync) \
+      <(cut -f4 NEH.ISsum.sync) <(cut -f13 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f14 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f15 NEH.dp25.COV.sync) \
+      <(cut -f4 NEH.ISsum.sync) <(cut -f22 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f23 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f24 NEH.dp25.COV.sync)> NEH.CON.sync
 
-mawk '!/CHR/' CA.B10.sync > CA.B10.input
+head -1 NEH.CON.sync
+tail -n +2 NEH.CON.sync > NEH.CON.input
 
-paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync)  <(cut -f7 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f8 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f9 CASE.dp20.Block10.COV.sync)> CASE.B10.sync
+# Stress columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 NEH.ISsum.sync)  <(cut -f7 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f8 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f9 NEH.dp25.COV.sync) \
+      <(cut -f4 NEH.ISsum.sync) <(cut -f16 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f17 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f18 NEH.dp25.COV.sync) \
+      <(cut -f4 NEH.ISsum.sync) <(cut -f25 NEH.dp25.COV.sync) \
+      <(cut -f5 NEH.ISsum.sync) <(cut -f26 NEH.dp25.COV.sync) \
+      <(cut -f6 NEH.ISsum.sync) <(cut -f27 NEH.dp25.COV.sync)> NEH.STR.sync
 
-head -1 CASE.B10.sync
-tail -n +2 CASE.B10.sync > CASE.B10.input
-
-
-paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f17 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f19 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f18 CASE.dp20.Block10.COV.sync) > SE.B10.sync
-
-head -1 SE.B10.sync
-tail -n +2 SE.B10.sync > SE.B10.input
-
-
-paste <(cut -f1,2,3,4 CASE.B10.ISsum.sync) <(cut -f10 CASE.dp20.Block10.COV.sync) <(cut -f5 CASE.B10.ISsum.sync) <(cut -f11 CASE.dp20.Block10.COV.sync) <(cut -f6 CASE.B10.ISsum.sync) <(cut -f12 CASE.dp20.Block10.COV.sync)> CON.B10.sync
-
-head -1 CON.B10.sync
-tail -n +2 CON.B10.sync | mawk '!/0:0:0:0:0:0/' > CON.B10.input
+head -1 NEH.STR.sync
+tail -n +2 NEH.STR.sync > NEH.STR.input
 ```
+
+### Calculate P-values - NEH
+#### Modified CMH - NEH population
+
+Reads in the interleaved IS+treatment sync files into R and runs an adapted Cochran-Mantel-Haenszel (CMH) test to identify loci where allele frequencies shift significantly between initial samples and treatment pools.
+
+Reading and parsing files - read.sync() requires a headerless input file
+```{r}
+# gen assigns each column a "generation," where 0 = IS (baseline) and 1 = treatment pool
+# repl  pairs each IS replicate with its corresponding treatment pool as replicate 1, 2, and 3
+# coverage() and af() extract per-locus read depth and allele frequencies from the parsed sync object, which are passed directly to the test.
+
+#stress
+str.neh.sync <- read.sync(file="NEH.STR.input", gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+str.neh.cov <- coverage(str.neh.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+str.neh.af <- af(str.neh.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+
+#control
+con.neh.sync <- read.sync(file="NEH.CON.input", gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+con.neh.cov <- coverage(con.neh.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+con.neh.af <- af(con.neh.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+```
+
+#### Running adapted CMH test
+The adapted CMH is a replicated test of allele frequency change — it asks whether allele frequencies shifted consistently across all 3 IS→treatment replicate pairs. **The parameters matter a lot here:**
+- Ne=rep(250, 3) — effective population size of 250 per replicate, used to correct for genetic drift
+  - estimated Ne to be around 400 because this is 1000x less than starting pool size of 400,000 larv per bucket and 100x less than 40,000 larv per initial sample
+- poolSize=rep(c(40000, 10000), ...) — pool sizes alternating between IS (40,000 larvae) and treatment (40,000 larvae), used for appropriate variance correction
+- MeanStart=TRUE — uses the mean IS allele frequency across replicates as the baseline rather than each IS independently
+- mincov=20 — excludes loci with coverage below 20x in any pool, preventing low-coverage noise from driving false positives
+```{r}
+#stress
+str.neh.pvals <- adapted.cmh.test(freq=str.neh.af, coverage=str.neh.cov,
+                                  Ne=rep(400, 9), gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), 
+                                  repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9),
+                                  poolSize=rep(c(40000,20000), ncol(str.neh.af)/2), MeanStart = TRUE, mincov =20)
+
+pstrdf <- as.data.table(cbind(row.names(str.neh.af),str.neh.pvals))
+colnames(pstrdf) <- c("Locus","PVAL")
+pstrdf$GROUP <- "PSTR"
+
+#control
+con.neh.pvals <- adapted.cmh.test(freq=con.neh.af, coverage=con.neh.cov,
+                                  Ne=rep(400, 9), gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), 
+                                  repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9),
+                                  poolSize=rep(c(40000,20000), ncol(con.neh.af)/2), MeanStart = TRUE, mincov =20)
+
+pcondf <- as.data.table(cbind(row.names(con.neh.af),con.neh.pvals))
+colnames(pcondf) <- c("Locus","PVAL")
+pcondf$GROUP <- "PCON"
+
+# build p value
+NEH.pval.table <- bind_rows(pcondf, pstrdf)
+NEH.pval.table <- NEH.pval.table %>%
+  separate(Locus, into = c("CHROM", "BP"), sep = "\\.(?=[^.]+$)")
+NEH.pval.table$PVAL <- as.numeric(NEH.pval.table$PVAL)
+```
+
+## MV 
+First normalize with initial sample coverage. The core logic is that the internal standard (IS) pools (the inital samples) act as a reference to normalize and cap coverage, ensuring that outlier detection downstream isn't driven by coverage artifacts rather than true allele frequency signals.
+```{bash, eval=FALSE}
+source activate CADO
+
+#sum up initial samples
+bash ../Scripts/sum.sh <(cut -f1,2,3,10-12,19-21,28-30 MV.dp25.cov.sync) > MV.IS.sync
+# makes extra columns with the sum data
+paste MV.IS.sync <(cut -f4 MV.IS.sync) <(cut -f4 MV.IS.sync)  > MV.ISsum3.sync
+
+# look at what col number to put in the compute average step next 
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' MV.dp25.cov.sync
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28-30 --complement MV.dp25.cov.sync) > MV.sansIS.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' MV.sansIS.cov.sync # last column is 27 (mean coverage w/o initial samples)
+
+# compute average coverage on sync file minus initial samples
+AV_COV=$(mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28-30 --complement MV.dp25.cov.sync) | mawk '{sum=sum+$27} END {print sum/NR}')
+echo $AV_COV
+
+mawk -f ../Scripts/add_cov_sync.txt MV.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x' | mawk '!/CHR/' | cut -f1-6 > MV.ISsum3nh.sync
+
+mawk -f ../Scripts/add_cov_sync_IS.txt MV.ISsum3.sync | mawk -v x=$AV_COV '$7 >= x'> MV.ISsum3nh.cov.sync
+
+# apply coverage filter back to main sync
+
+#first check col number to apply filter to
+paste MV.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt MV.ISsum3.sync ) > ISnormMV.cov.sync
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' ISnormMV.cov.sync # col 42 (mean cov normalized by initial samples)
+
+# apply initial sample coverage filter
+paste MV.dp25.cov.sync <(mawk -f ../Scripts/add_cov_sync.txt MV.ISsum3.sync ) | mawk -v x=$AV_COV '$42 >= x' | cut -f1-33 > temp.sync
+
+# MV samples normalized by initial sample coverage stored in *COV.sync
+mv temp.sync MV.dp25.COV.sync
+#cp MV.dp25.cov.sync MV.dp25.COV.sync
+
+# cap coverage at IS maxiumum
+
+#remove inital samples and remove old cov stats and recalculates the coverage with only treatment pools
+mawk -f ../Scripts/add_cov_sync.txt <(cut -f10-12,19-21,28- --complement MV.dp25.COV.sync) > temp.cov
+
+# pastes pop coverage with minimum inital sample coverage (col 7) to last col (25) of temp.cov and compare treatemtn pool mean cov ($24) to IS min cov ($25)
+paste temp.cov <(cut -f7 MV.ISsum3nh.cov.sync) | mawk -v OFS='\t' '{if ($24 > $25) {$24=$25; print $0} else {print $0}}' | cut -f1-24> MV.dp25.COV
+```
+The final output is MV.dp25.COV, a fully processed, coverage-normalized sync ready for outlier detection.
+
 
 ```{bash, eval=FALSE}
 source activate random_draw
 
-#python ../scripts/sub_sample.py CASE.dp20.Block12.COV CASE.B12.ISsum4nh.sync CASE.B12.ISs.sync
-python ../scripts/sub_sample.py CASE.B12.ISsum4nh.cov.sync CASE.B12.ISsum4nh.sync CASE.B12.ISs.sync
+# subsampling the internal standard 
+#python ../scripts/sub_sample.py MV.dp25.COV MV.ISsum3nh.sync MV.ISs.sync
+python ../Scripts/sub_sample.py MV.ISsum3nh.cov.sync MV.ISsum3nh.sync MV.ISs.sync
 
-cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3\tIS_R4") CASE.B12.ISs.sync > CASE.B12.ISsum.sync
+# add heading
+cat <(echo -e "CHROM\tPOS\tREF\tIS_RS1\tIS_RS2\tIS_RS3") MV.ISs.sync > MV.ISsum.sync
 
-paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f4 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 5 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f6 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f7 CASE.dp20.Block12.COV.sync) > CA.B12.sync
+# building treatment specific input files (interleaved with IS columns)
+#these IS columns will serve as the null expectation during outlier detection
 
-head -1 CA.B12.sync
-tail -n +2 CA.B12.sync > CA.B12.input
+# Control columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 MV.ISsum.sync) <(cut -f4 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f5 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f6 MV.dp25.COV.sync) \
+      <(cut -f4 MV.ISsum.sync) <(cut -f13 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f14 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f15 MV.dp25.COV.sync) \
+      <(cut -f4 MV.ISsum.sync) <(cut -f22 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f23 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f24 MV.dp25.COV.sync)> MV.CON.sync
 
-paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f8 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 9 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f10 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f11 CASE.dp20.Block12.COV.sync) > CASE.B12.sync
+head -1 MV.CON.sync
+tail -n +2 MV.CON.sync > MV.CON.input
 
-head -1 CASE.B12.sync
-tail -n +2 CASE.B12.sync > CASE.B12.input
+# Stress columns - will need to update columns based on data
+paste <(cut -f1,2,3,4 MV.ISsum.sync)  <(cut -f7 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f8 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f9 MV.dp25.COV.sync) \
+      <(cut -f4 MV.ISsum.sync) <(cut -f16 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f17 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f18 MV.dp25.COV.sync) \
+      <(cut -f4 MV.ISsum.sync) <(cut -f25 MV.dp25.COV.sync) \
+      <(cut -f5 MV.ISsum.sync) <(cut -f26 MV.dp25.COV.sync) \
+      <(cut -f6 MV.ISsum.sync) <(cut -f27 MV.dp25.COV.sync)> MV.STR.sync
 
-paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f20 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 21 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f22 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f23 CASE.dp20.Block12.COV.sync) > SE.B12.sync
+head -1 MV.STR.sync
+tail -n +2 MV.STR.sync > MV.STR.input
+```
 
-head -1 SE.B12.sync
-tail -n +2 SE.B12.sync > SE.B12.input
+### Calculate P-values - MV
+#### Modified CMH - MV population
 
-paste <(cut -f1,2,3,4 CASE.B12.ISsum.sync) <(cut -f12 CASE.dp20.Block12.COV.sync) <(cut -f5 CASE.B12.ISsum.sync) <(cut -f 13 CASE.dp20.Block12.COV.sync) <(cut -f6 CASE.B12.ISsum.sync) <(cut -f14 CASE.dp20.Block12.COV.sync) <(cut -f7 CASE.B12.ISsum.sync) <(cut -f15 CASE.dp20.Block12.COV.sync) > CON.B12.sync
+Reads in the interleaved IS+treatment sync files into R and runs an adapted Cochran-Mantel-Haenszel (CMH) test to identify loci where allele frequencies shift significantly between initial samples and treatment pools.
 
-head -1 CON.B12.sync
-tail -n +2 CON.B12.sync > CON.B12.input
+Reading and parsing files - read.sync() requires a headerless input file
+```{r}
+# gen assigns each column a "generation," where 0 = IS (baseline) and 1 = treatment pool
+# repl  pairs each IS replicate with its corresponding treatment pool as replicate 1, 2, and 3
+# coverage() and af() extract per-locus read depth and allele frequencies from the parsed sync object, which are passed directly to the test.
+
+#stress
+str.mv.sync <- read.sync(file="MV.STR.input", gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+str.mv.cov <- coverage(str.mv.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+str.mv.af <- af(str.mv.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+
+#control
+con.mv.sync <- read.sync(file="MV.CON.input", gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+con.mv.cov <- coverage(con.mv.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+con.mv.af <- af(con.mv.sync, gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9))
+```
+
+#### Running adapted CMH test
+The adapted CMH is a replicated test of allele frequency change — it asks whether allele frequencies shifted consistently across all 3 IS→treatment replicate pairs. **The parameters matter a lot here:**
+- Ne=rep(250, 3) — effective population size of 250 per replicate, used to correct for genetic drift
+  - estimated Ne to be around 400 because this is 1000x less than starting pool size of 400,000 larv per bucket and 100x less than 40,000 larv per initial sample
+- poolSize=rep(c(40000, 10000), ...) — pool sizes alternating between IS (40,000 larvae) and treatment (40,000 larvae), used for appropriate variance correction
+- MeanStart=TRUE — uses the mean IS allele frequency across replicates as the baseline rather than each IS independently
+- mincov=20 — excludes loci with coverage below 20x in any pool, preventing low-coverage noise from driving false positives
+```{r}
+#stress
+str.mv.pvals <- adapted.cmh.test(freq=str.mv.af, coverage=str.mv.cov,
+                                  Ne=rep(400, 9), gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), 
+                                  repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9),
+                                  poolSize=rep(c(40000,40000), ncol(str.mv.af)/2), MeanStart = TRUE, mincov =20)
+
+pstrdf <- as.data.table(cbind(row.names(str.mv.af),str.mv.pvals))
+colnames(pstrdf) <- c("Locus","PVAL")
+pstrdf$GROUP <- "PSTR"
+
+#control
+con.mv.pvals <- adapted.cmh.test(freq=con.mv.af, coverage=con.mv.cov,
+                                  Ne=rep(400, 9), gen=c(0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1), 
+                                  repl=c(1, 1, 2, 2, 3,3, 4,4, 5,5, 6,6, 7, 7, 8,8, 9,9),
+                                  poolSize=rep(c(40000,40000), ncol(con.mv.af)/2), MeanStart = TRUE, mincov =20)
+
+pcondf <- as.data.table(cbind(row.names(con.mv.af),con.mv.pvals))
+colnames(pcondf) <- c("Locus","PVAL")
+pcondf$GROUP <- "PCON"
+
+# build p value
+MV.pval.table <- bind_rows(pcondf, pstrdf)
+MV.pval.table <- MV.pval.table %>%
+  separate(Locus, into = c("CHROM", "BP"), sep = "\\.(?=[^.]+$)")
+MV.pval.table$PVAL <- as.numeric(MV.pval.table$PVAL)
+```
+
+#### convert p values to q values
+This applies FDR (false discovery rate) correction to your CMH p-values for each population, converting raw p-values into q-values
+```{r}
+Qvalue_convert(ARC.pval.table) ->ARC.pv
+Qvalue_convert(NEH.pval.table) ->NEH.pv
+Qvalue_convert(MV.pval.table) ->MV.pv
+```
+
+
+## Multi-tiered outlier filtering
+identify high-confidence candidate loci under selection due to stress across three populations
+```{r}
+pp1 <- rbind(ARC.pv,NEH.pv,MV.pv)
+
+alpha = 0.1
+alpha2 =0.1
+
+ppsig.ARC.1 <- Significant_subset(ARC.pv,alpha,alpha2)
+ppsig.NEH.1 <- Significant_subset(NEH.pv,alpha,alpha2)
+ppsig.MV.1 <- Significant_subset(MV.pv,alpha,alpha2)
+
+ppsig.ARC.1$POP <- "ARC"
+ppsig.NEH.1$POP <- "NEH"
+ppsig.MV.1$POP <- "MV"
+
+ppsig3.FDR10 <- bind_rows(ppsig.ARC.1,ppsig.NEH.1,ppsig.MV.1)
+
+all_sig.STR<- subset(ppsig3.FDR10, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>2)
+all_sig.STR$Sig.CON<- FALSE
+
+write.table(all_sig.STR, "Sig.Loci.3", sep="\t", row.names = FALSE, quote = FALSE)
+```
+
+
+```{r}
+alpha = 0.05
+NEH.alpha = alpha * 2
+alpha2 =0.1
+
+ppsig.ARC.05 <- Significant_subset(ARC.pv,alpha,alpha2)
+ppsig.NEH.05 <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+ppsig.MV.05 <- Significant_subset(MV.pv,alpha,alpha2)
+
+ppsig.ARC.05$POP <- "ARC"
+ppsig.NEH.05$POP <- "NEH"
+ppsig.MV.05$POP <- "MV"
+
+ppsig3.FDR05 <- rbind(ppsig.ARC.05,ppsig.NEH.05,ppsig.MV.05)
+
+multi_sig.STR<- subset(ppsig3.FDR05, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
+multi_sig.STR$Sig.CON <- FALSE
+
+#multi_sig.CA<- subset(ppsig3.FDR05, QCA < NEH.alpha) %>% group_by(SNP) %>% filter(n()>1)
+#multi_sig.CASE<- subset(ppsig3.FDR05, QCASE < NEH.alpha) %>% group_by(SNP) %>% filter(n()>1)
+#multi_sig.SE<- subset(ppsig3.FDR05, QSE < NEH.alpha) %>% group_by(SNP) %>% filter(n()>1)
+
+#multi_sig <- rbind(ppsig3.FDR05 %>% group_by(SNP) %>% filter(n()>1))
+#multi_sig <- rbind(multi_sig.CA,multi_sig.CASE,multi_sig.SE)
+
+write.table(multi_sig.STR, "Sig.Loci.2", sep="\t", row.names = FALSE, quote = FALSE)
+```
+
+```{r}
+alpha = 0.01
+alpha2 =0.1
+NEH.alpha = alpha *2
+
+ppsig.ARC.01 <- Significant_subset(ARC.pv,alpha,alpha2)
+ppsig.NEH.01 <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+ppsig.MV.01 <- Significant_subset(MV.pv,alpha,alpha2)
+```
+
+```{r}
+conpp1 <- subset(pp1, QCON < alpha)
+
+ppsig.ARC.01$POP <- "ARC"
+ppsig.NEH.01$POP <- "NEH"
+ppsig.MV.01$POP <- "MV"
+
+ppsig3.FDR01 <- rbind(ppsig.ARC.01,ppsig.NEH.01,ppsig.MV.01)
+
+write.table(ppsig3.FDR01, "Sig.Loci.FDR01.1", sep="\t", row.names = FALSE, quote = FALSE)
+write.table(ppsig.ARC.01, "Sig.Loci.FDR01.ARC", sep="\t", row.names = FALSE, quote = FALSE)
+write.table(ppsig.NEH.01, "Sig.Loci.FDR01.NEH", sep="\t", row.names = FALSE, quote = FALSE)
+write.table(ppsig.MV.01, "Sig.Loci.FDR01.MV", sep="\t", row.names = FALSE, quote = FALSE)
+
+multi_sig.STR.01<- subset(ppsig3.FDR01, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
+multi_sig.STR.01$Sig.CON <- FALSE
+
+write.table(multi_sig.STR.01, "Sig.Loci.FDR01.2", sep="\t", row.names = FALSE, quote = FALSE)
+
+alpha = 0.01
+alpha2 =0.1
+NEH.alpha = alpha * 2
+
+
+ppsig.ARC <- Significant_subset(ARC.pv,alpha,alpha2)
+ppsig.ARC <- subset(ppsig.ARC, Sig.STR == TRUE & QSTR < quantile(ppsig.ARC$QSTR, na.rm = TRUE, probs = 0.01)
+                    )
+ppsig.NEH <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+ppsig.NEH <- subset(ppsig.NEH, Sig.STR == TRUE & QSTR < quantile(ppsig.NEH$QSTR, na.rm = TRUE, probs = 0.01)
+                    )
+ppsig.MV <- Significant_subset(MV.pv,alpha,alpha2)
+ppsig.MV <- subset(ppsig.MV, Sig.STR == TRUE & QSTR < quantile(ppsig.MV$QSTR, na.rm = TRUE, probs = 0.01)
+                    )
+
+ppsig.ARC$POP <- "ARC"
+ppsig.NEH$POP <- "NEH"
+ppsig.MV$POP <- "MV"
+
+singleton <- read.table("singleton.loci",header=TRUE)
+
+ppsig1.s <- semi_join(rbind(ppsig.ARC,ppsig.NEH,ppsig.MV),singleton, by = "SNP")
+```
+
+## Control filtering by block
+```{r}
+# ARC
+conpp.ARC <- subset(ARC.pv, QCON < 0.001)
+allcon.ARC <- subset(conpp.ARC, QCON / QSTR < 10)
+write.table(allcon.ARC, "ARC.ALL.CON.SNPS", sep="\t", row.names=FALSE, quote=FALSE)
+
+# NEH
+conpp.NEH <- subset(NEH.pv, QCON < 0.001)
+allcon.NEH <- subset(conpp.NEH, QCON / QSTR < 10)
+write.table(allcon.NEH, "NEH.ALL.CON.SNPS", sep="\t", row.names=FALSE, quote=FALSE)
+
+# MV
+conpp.MV <- subset(MV.pv, QCON < 0.001)
+allcon.MV <- subset(conpp.MV, QCON / QSTR < 10)
+write.table(allcon.MV, "MV.ALL.CON.SNPS", sep="\t", row.names=FALSE, quote=FALSE)
+```
+
+```{r}
+total.sig.ARC <- anti_join(ppsig.ARC, allcon.ARC, by = "SNP")
+total.sig.NEH <- anti_join(ppsig.NEH, allcon.NEH, by = "SNP")
+total.sig.MV  <- anti_join(ppsig.MV,  allcon.MV,  by = "SNP")
+
+write.table(total.sig.ARC, "Total.Significant.uf.Loci.ARC", sep="\t", row.names=FALSE, quote=FALSE)
+write.table(total.sig.NEH, "Total.Significant.uf.Loci.NEH", sep="\t", row.names=FALSE, quote=FALSE)
+write.table(total.sig.MV,  "Total.Significant.uf.Loci.MV",  sep="\t", row.names=FALSE, quote=FALSE)
+```   
+
+```{bash}
+source activate CADO
+
+for POP in ARC NEH MV; do
+
+  # Build per-population significant loci BED
+  cut -f2,3 Total.Significant.uf.Loci.${POP} | tail -n +2 | sort -k1,2 | uniq \
+    | mawk '{print $1 "\t" $2-1 "\t" $2}' \
+    | bedtools sort -i - > CASE.Total.Significant.uf.loci.${POP}.bed
+
+  # Build per-population CON loci gene list
+  bedtools intersect -wb \
+    -a <(mawk '{print $2"\t"$3-1"\t"$3}' ${POP}.ALL.CON.SNPS) \
+    -b /home/Genomic_Resources/C_virginica/bed_and_GFF/sorted.ref3.0.gene.bed \
+    | grep -oh "gene=LOC.*;g" | sed 's/gene=//g' | sed 's/;g//g' \
+    | sort | uniq > CON.LOCI.${POP}
+
+  # Build per-population CON filter BED
+  bedtools intersect -wb \
+    -a <(mawk '{print $2"\t"$3-1"\t"$3}' ${POP}.ALL.CON.SNPS) \
+    -b /home/Genomic_Resources/C_virginica/bed_and_GFF/sorted.ref3.0.gene.bed \
+    | cut -f4- | bedtools sort | bedtools merge > con.loci.filter.${POP}.bed
+
+  # Build per-population ToFilter file
+  cat <(echo -e "SNP\tCHROM\tBP") \
+    <(bedtools intersect \
+        -a CASE.Total.Significant.uf.loci.${POP}.bed \
+        -b con.loci.filter.${POP}.bed \
+      | mawk '{print $1"_"$3"\t"$1"\t"$3}') \
+    > ToFilter.Con.Loci.${POP}.txt
+
+done
+```
+
+
+```{r}
+library(dplyr)
+
+pops <- c("NEH", "MV")
+
+for (pop in pops) {
+
+  con_filter <- read.table(paste0("ToFilter.Con.Loci.", pop, ".txt"), header = TRUE)
+
+  total.sig <- get(paste0("total.sig.", pop))
+
+  # Remove contaminating loci
+  total.sig <- unique(anti_join(total.sig, con_filter, by = "SNP"))
+
+  write.table(total.sig,
+              paste0("Total.Significant.Loci.", pop),
+              sep = "\t", row.names = FALSE, quote = FALSE)
+}
+
+# note ARC did not have any loci to filter out
+```
+
+
+#### Can do BED conversion here and GO enrichment, but skipping for now
+
+
+# Manhattan Plots
+
+## Per population Outlier Manhattan Plot Composite
+```{r}
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+
+make_manhattan_plot <- function(pv_data, sig_data, con_filter, allcon, pop_name,
+                                outlier_color, y_limit = NULL) {
+  
+  pv_data <- pv_data %>%
+    mutate(
+      Group = case_when(
+        SNP %in% con_filter$SNP ~ "Control Treatment Filtered",
+        SNP %in% allcon$SNP ~ "Control Treatment Filtered",
+        TRUE ~ "Shared SNP"
+      )
+    )
+  
+  man <- ggman(
+    pv_data,
+    pvalue = "QSTR",
+    chr = "CHR",
+    snp = "SNP",
+    bp = "BP",
+    relative.positions = TRUE,
+    sigLine = NA,
+    pointSize = 1.5,
+    title = "",
+    alpha = 0.5
+  )
+  
+  dfm <- man[[1]]
+  dfm$chrom_alt <- factor(dfm$chrom_alt, levels = c(0, 1))
+  
+  dfmo <- semi_join(dfm, sig_data, by = "SNP")
+  dfmo$Group <- "Outlier"
+  
+  dfmsplit <- split(dfm, dfm$chrom)
+  xbreaks <- sapply(dfmsplit, function(x) {
+    midpoint <- length(x$index) / 2
+    if (midpoint < 1) midpoint <- 1
+    x$index[midpoint]
+  })
+  
+  y_max <- if (is.null(y_limit)) max(dfm$marker + 1, na.rm = TRUE) else y_limit
+  
+  p <- ggplot(dfm, aes(x = index, y = marker, colour = as.factor(chrom_alt))) +
+    geom_point(aes(alpha = marker, shape = Group, size = marker)) +
+    geom_point(
+      data = dfmo,
+      aes(x = index, y = marker, shape = Group, size = marker),
+      color = outlier_color,
+      fill = outlier_color
+    ) +
+    scale_x_continuous(
+      breaks = xbreaks,
+      labels = names(xbreaks),
+      expand = c(0, 0),
+      limits = c(0, max(dfm$index) + 10)
+    ) +
+    guides(colour = FALSE, alpha = FALSE, fill = FALSE, size = FALSE) +
+    scale_y_continuous(expand = c(0, 0), limits = c(0, y_max)) +
+    scale_size_continuous(range = c(0.25, 3)) +
+    scale_alpha_continuous(range = c(0.05, 0.8), limits = c(0, 50)) +
+    ggtitle(pop_name) +
+    labs(x = "Chromosome", y = expression(-Log10(q-value))) +
+    theme_classic() +
+    scale_shape_manual(values = c(15, 21, 16, 17)) +
+    scale_color_manual(values = c("grey", "dark grey"), guide = FALSE) +
+    guides(shape = guide_legend(override.aes = list(color = "grey", size = 5, linetype = 0)))
+  
+  list(plot = p, dfm = dfm, dfmo = dfmo)
+}
 
 ```
+
+```{r}
+arc_con_filter <- read.table("ToFilter.Con.Loci.ARC.txt", header = TRUE)
+neh_con_filter <- read.table("ToFilter.Con.Loci.NEH.txt", header = TRUE)
+mv_con_filter  <- read.table("ToFilter.Con.Loci.MV.txt",  header = TRUE)
+
+arc.h <- subset(total.sig.ARC, Sig.STR == TRUE)
+neh.h <- subset(total.sig.NEH, Sig.STR == TRUE)
+mv.h  <- subset(total.sig.MV,  Sig.STR == TRUE)
+
+arc_res <- make_manhattan_plot(
+  pv_data = ARC.pv,
+  sig_data = arc.h,
+  con_filter = arc_con_filter,
+  allcon = allcon.ARC,
+  pop_name = "ARC",
+  outlier_color = "#3F8F7A"
+)
+
+neh_res <- make_manhattan_plot(
+  pv_data = NEH.pv,
+  sig_data = neh.h,
+  con_filter = neh_con_filter,
+  allcon = allcon.NEH,
+  pop_name = "NEH",
+  outlier_color = "#D8848A",
+  y_limit = 60
+)
+
+mv_res <- make_manhattan_plot(
+  pv_data = MV.pv,
+  sig_data = mv.h,
+  con_filter = mv_con_filter,
+  allcon = allcon.MV,
+  pop_name = "MV",
+  outlier_color = "#5F7BAA"
+)
+
+```
+
+
+```{r}
+png(filename = "ManhattanPlots/All_Populations_Manhattan.png", 
+    units = "in", width = 10, height = 6,  res = 300, bg = "transparent")
+arc_res$plot / neh_res$plot / mv_res$plot +
+  plot_annotation(tag_levels = "A") +
+  plot_layout(guides = "collect") 
+dev.off()
+```
+
+> nrow(total.sig.ARC)
+> [1] 3 outliers
+> nrow(total.sig.MV)
+> [1] 42 outliers
+> nrow(total.sig.NEH)
+> [1] 35 outliers
+
+
+## ARC - Outlier Manhattan Plot
+```{r}
+arc_con_filter <- read.table("ToFilter.Con.Loci.ARC.txt", header = TRUE)
+```
+
+```{r, warning =FALSE, eval = FALSE}
+arc.h <- subset(total.sig.ARC, Sig.STR == TRUE)
+arc.c <- subset(ARC.pv, QCON < 0.1)
+
+
+ARC.pp <- ARC.pv %>%
+  mutate(
+    Group = case_when(
+      #SNP %in% singleton$SNP ~ "Singleton",
+      SNP %in% arc.c$SNP ~ "Control Treatment Filtered",
+      SNP %in% allcon.ARC$SNP ~ "Control Treatment Filtered",
+      SNP %in% arc_con_filter$SNP ~ "Control Treatment Filtered",
+      TRUE ~ "Shared SNP"
+    )
+  )
+
+man <-ggman(ARC.pp, pvalue="QSTR", chr="CHR", snp="SNP",bp="BP", relative.positions = TRUE , sigLine = NA,
+            pointSize=1.5,title = "", alpha = 0.5)
+
+dfm <- man[[1]]
+
+dfm$chrom_alt <- factor(dfm$chrom_alt, levels=c(0,1))
+
+dfmo <- semi_join(dfm, arc.h, by = "SNP")
+dfmo$Group <- "Outlier"
+
+dfmsplit <- split(dfm, dfm$chrom)
+xbreaks <- sapply(dfmsplit,function(x) {
+    midpoint <- length(x$index)/2
+    if(midpoint <1) midpoint <- 1
+    return(x$index[midpoint])
+})
+arc.STR <-ggplot(dfm, aes(x= index, y=marker, colour = as.factor(chrom_alt)))+
+  geom_point(aes(alpha=marker, shape=Group, size = marker))+  
+  geom_point(data=dfmo, fill=cbPaletteSmall3[1], aes(x=index, y=marker, shape=Group, size=marker),  color = cbPaletteSmall3[1])+
+  scale_x_continuous(breaks = xbreaks, labels = names(xbreaks),expand = c(0,0),limits = c(0,max(dfm$index)+10)) +
+  guides(colour = FALSE,alpha=FALSE, fill = FALSE, size = FALSE) +
+  scale_y_continuous(expand = c(0,0),limits=c(0,max(dfm$marker+1,na.rm=TRUE)))+
+  scale_size_continuous(range = c(0.25,3)) +
+  scale_alpha_continuous(range=c(0.05,0.8), limits= c(0,50))+
+  ggtitle("ARC") +
+  labs(x = "Chromosome") +
+  theme_classic()+
+  labs(y=expression(-Log10(q-value))) +
+  scale_shape_manual(values=c(15,21,16,17))+
+  scale_color_manual(values=c("grey", "dark grey"), guide =FALSE)+
+  guides(shape = guide_legend(override.aes = list(color = "grey", size = 5, linetype =0) ) )
+
+print(arc.STR)
+
+ggsave(
+  filename = "ARC_manhattan.png",
+  plot     = arc.STR,
+  width    = 10,      # in inches
+  height   = 5,
+  dpi      = 300,
+  bg       = "transparent"  # or "white"
+)
+```
+
+## NEH - Outlier Manhattan Plot
+```{r}
+neh_con_filter <- read.table("ToFilter.Con.Loci.NEH.txt", header = TRUE)
+```
+
+```{r, warning =FALSE, eval = FALSE}
+neh.h <- subset(total.sig.NEH, Sig.STR == TRUE)
+neh.c <- subset(NEH.pv, QCON < 0.1)
+
+
+NEH.pp <- NEH.pv %>%
+  mutate(
+    Group = case_when(
+      #SNP %in% singleton$SNP ~ "Singleton",
+      SNP %in% neh.c$SNP ~ "Control Treatment Filtered",
+      SNP %in% allcon.NEH$SNP ~ "Control Treatment Filtered",
+      SNP %in% neh_con_filter$SNP ~ "Control Treatment Filtered",
+      TRUE ~ "Shared SNP"
+    )
+  )
+
+man <-ggman(NEH.pp, pvalue="QSTR", chr="CHR", snp="SNP",bp="BP", relative.positions = TRUE , sigLine = NA,
+            pointSize=1.5,title = "", alpha = 0.5)
+
+dfm <- man[[1]]
+
+dfm$chrom_alt <- factor(dfm$chrom_alt, levels=c(0,1))
+
+dfmo <- semi_join(dfm, neh.h, by = "SNP")
+dfmo$Group <- "Outlier"
+
+dfmsplit <- split(dfm, dfm$chrom)
+xbreaks <- sapply(dfmsplit,function(x) {
+    midpoint <- length(x$index)/2
+    if(midpoint <1) midpoint <- 1
+    return(x$index[midpoint])
+})
+neh.STR <-ggplot(dfm, aes(x= index, y=marker, colour = as.factor(chrom_alt)))+
+  geom_point(aes(alpha=marker, shape=Group, size = marker))+  
+  geom_point(data=dfmo, fill=cbPaletteSmall3[2], aes(x=index, y=marker, shape=Group, size=marker),  color = cbPaletteSmall3[2])+
+  scale_x_continuous(breaks = xbreaks, labels = names(xbreaks),expand = c(0,0),limits = c(0,max(dfm$index)+10)) +
+  guides(colour = FALSE,alpha=FALSE, fill = FALSE, size = FALSE) +
+  #scale_y_continuous(expand = c(0,0),limits=c(0,max(dfm$marker+1,na.rm=TRUE)))+
+  ylim(0,60) +
+  scale_size_continuous(range = c(0.25,3)) +
+  scale_alpha_continuous(range=c(0.05,0.8), limits= c(0,50))+
+  ggtitle("NEH") +
+  labs(x = "Chromosome") +
+  theme_classic()+
+  labs(y=expression(-Log10(q-value))) +
+  scale_shape_manual(values=c(15,21,16,17))+
+  scale_color_manual(values=c("grey", "dark grey"), guide =FALSE)+
+  guides(shape = guide_legend(override.aes = list(color = "grey", size = 5, linetype =0) ) )
+
+print(neh.STR)
+
+ggsave(
+  filename = "NEH_manhattan.png",
+  plot     = neh.STR,
+  width    = 10,      # in inches
+  height   = 5,
+  dpi      = 300,
+  bg       = "transparent"  # or "white"
+)
+```
+## MV - Outlier Manhattan Plot
+```{r}
+mv_con_filter <- read.table("ToFilter.Con.Loci.MV.txt", header = TRUE)
+```
+
+```{r, warning =FALSE, eval = FALSE}
+mv.h <- subset(total.sig.MV, Sig.STR == TRUE)
+mv.c <- subset(MV.pv, QCON < 0.1)
+
+
+MV.pp <- MV.pv %>%
+  mutate(
+    Group = case_when(
+      #SNP %in% singleton$SNP ~ "Singleton",
+      SNP %in% mv.c$SNP ~ "Control Treatment Filtered",
+      SNP %in% allcon.MV$SNP ~ "Control Treatment Filtered",
+      SNP %in% mv_con_filter$SNP ~ "Control Treatment Filtered",
+      TRUE ~ "Shared SNP"
+    )
+  )
+
+man <-ggman(MV.pp, pvalue="QSTR", chr="CHR", snp="SNP",bp="BP", relative.positions = TRUE , sigLine = NA,
+            pointSize=1.5,title = "", alpha = 0.5)
+
+dfm <- man[[1]]
+
+dfm$chrom_alt <- factor(dfm$chrom_alt, levels=c(0,1))
+
+dfmo <- semi_join(dfm, mv.h, by = "SNP")
+dfmo$Group <- "Outlier"
+
+dfmsplit <- split(dfm, dfm$chrom)
+xbreaks <- sapply(dfmsplit,function(x) {
+    midpoint <- length(x$index)/2
+    if(midpoint <1) midpoint <- 1
+    return(x$index[midpoint])
+})
+mv.STR <-ggplot(dfm, aes(x= index, y=marker, colour = as.factor(chrom_alt)))+
+  geom_point(aes(alpha=marker, shape=Group, size = marker))+  
+  geom_point(data=dfmo, fill=cbPaletteSmall3[3], aes(x=index, y=marker, shape=Group, size=marker),  color = cbPaletteSmall3[3])+
+  scale_x_continuous(breaks = xbreaks, labels = names(xbreaks),expand = c(0,0),limits = c(0,max(dfm$index)+10)) +
+  guides(colour = FALSE,alpha=FALSE, fill = FALSE, size = FALSE) +
+  scale_y_continuous(expand = c(0,0),limits=c(0,max(dfm$marker+1,na.rm=TRUE)))+
+  scale_size_continuous(range = c(0.25,3)) +
+  scale_alpha_continuous(range=c(0.05,0.8), limits= c(0,50))+
+  ggtitle("MV") +
+  labs(x = "Chromosome") +
+  theme_classic()+
+  labs(y=expression(-Log10(q-value))) +
+  scale_shape_manual(values=c(15,21,16,17))+
+  scale_color_manual(values=c("grey", "dark grey"), guide =FALSE)+
+  guides(shape = guide_legend(override.aes = list(color = "grey", size = 5, linetype =0) ) )
+
+print(mv.STR)
+
+ggsave(
+  filename = "MV_manhattan.png",
+  plot     = mv.STR,
+  width    = 10,      # in inches
+  height   = 5,
+  dpi      = 300,
+  bg       = "transparent"  # or "white"
+)
+```
+
+
+
+I want to set my own population specific colors cbPaletteSmall3 <- c("#3F8F7A", "#D8848A", "#5F7BAA")
+
+
+
+# Venn Diagrams
+
+
+# PCA
+PCAs on outliers from different populations
+
+
+## ARC
+
+## NEH
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' Total.Significant.Loci.NEH | cut -f2,3 | sort | uniq > TSL.pca.filter
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' TSL.pca.filter NEH.dp25.cov.sync | cut --complement -f31- > outlier.pca.sync
+```
+
+```{r}
+# Read sync file of significant outlier loci for outlier PCA
+input.all.outlier <- read.sync(file="outlier.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
+input.all.outlier.af <- af(input.all.outlier,gen=seq(1,27), repl=seq(1,27))
+
+NEH.labels <- c(
+  "NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+  "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+  "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03"
+)
+length(NEH.labels)  # should be 27
+
+pop.ids <- colnames(input.all.outlier.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = NEH.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^MV",  meta$bio_label),  "MV",
+                          ifelse(grepl("^NEH", meta$bio_label), "NEH", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(input.all.outlier.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.outlier.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(input.all.outlier.af) <- meta$bio_label
+```
+
+
+
+```{r}
+# Perform PCA
+af_t <- t(input.all.outlier.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.outlier.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Allele Frequencies"
+  )
+
+```
+
+```{r}
+png(filename="PC1.png", type="cairo",units="px", width=5400, height=3000, res=300, bg="transparent")
+ggplot(pca_df, aes(x=PC1, y= PC2, color = Treatments, fill=Treatments)) + geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+ theme_classic() + scale_fill_manual(values=cbPaletteSmall,name="Treatment")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24))+
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Allele Frequencies"
+  )
+dev.off()
+png(filename="PC1b.png", type="cairo",units="px", width=5400, height=3000, res=300, bg="transparent")
+ggplot(pca_df, aes(x=PC1, y= PC2, color = Population, fill=Population)) + geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+ theme_classic() + scale_fill_manual(values=cbPaletteSmall,name="Spawn")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24))+
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Allele Frequencies"
+  )
+dev.off()
+```
+
+
+## MV
