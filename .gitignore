@@ -13,6 +13,7 @@ Analysis/test.*
 fastqc_raw/
 fastqc_trimmed/
 raw_seq/
+Larval_ddocent/
 
 # R project user files
 Analysis/.Rproj.user/
