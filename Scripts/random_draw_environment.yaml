@@ -1,0 +1,6 @@
+name: random_draw
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+prefix: /home/mguidry/miniconda3/envs/random_draw

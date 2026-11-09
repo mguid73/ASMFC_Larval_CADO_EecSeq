@@ -1,0 +1,38 @@
+#!/usr/bin/awk -f
+
+# Skip the header, add "MIN_COV", "MAX_COV", "MEAN_COV" to the header, and print it
+NR == 1 {
+    print $0 "\tMIN_COV\tMAX_COV\tMEAN_COV";
+    next;
+}
+
+{
+    min_sum = 1e9;
+    max_sum = 0;
+    total_sum = 0;
+    column_count = 0;
+
+    # Loop through columns starting from the 4th (which has numbers separated by colons)
+    for (i = 4; i <= NF; i++) {
+        # Split the column value by ":" and sum the numbers
+        split($i, arr, ":");
+        col_sum = 0;
+        for (j in arr) {
+            col_sum += arr[j];
+        }
+
+        # Track the minimum and maximum column sums
+        if (col_sum < min_sum) min_sum = col_sum;
+        if (col_sum > max_sum) max_sum = col_sum;
+
+        # Add to the total sum for the row
+        total_sum += col_sum;
+        column_count++;
+    }
+
+    # Calculate the average sum for the row
+    avg_sum = total_sum / column_count;
+
+    # Print the line with three extra columns: min, max, and avg, using tabs as the separator
+    print $0 "\t" min_sum "\t" max_sum "\t" avg_sum;
+}
