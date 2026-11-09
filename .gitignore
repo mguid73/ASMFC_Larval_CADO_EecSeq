@@ -1,0 +1,18 @@
+# Large analysis output files
+Analysis/*.sync
+Analysis/*.pos
+Analysis/*.loci
+Analysis/*.COV
+Analysis/*.cov
+Analysis/*.input
+Analysis/*.bed
+Analysis/temp.*
+Analysis/test.*
+
+# FastQC and raw data
+fastqc_raw/
+fastqc_trimmed/
+raw_seq/
+
+# R project user files
+Analysis/.Rproj.user/
