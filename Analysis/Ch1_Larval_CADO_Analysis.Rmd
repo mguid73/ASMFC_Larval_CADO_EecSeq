@@ -7,7 +7,7 @@ output: html_notebook
 knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = TRUE)
 ```
 
-# Setup
+### Setup
 ```{r include=TRUE}
 library(ggplot2)
 library(tidyr)
@@ -103,6 +103,10 @@ cbPaletteSmall <- c("#3F8F7A", "#D3DDF0", "#4169E1", "#5F7BAA", "#F3D6D9", "#8C3
 
 cbPaletteSmall3 <- c("#3F8F7A", "#D8848A", "#5F7BAA")
 
+ARCpalette <- "#3F8F7A"
+NEHpalette <- c("#F3D6D9", "#8C3A41", "hotpink")
+MVpalette <- c("#D3DDF0", "#4169E1", "#5F7BAA")
+
 treatPalette <- c("#A29BAD", "#4CAF72", "#D29F13")
 ```
 
@@ -112,8 +116,7 @@ sessionInfo()
 
 
 # Visualize across 10,000 random loci
-
-## All
+## All populations PCA of random 10k loci
 ```{bash, eval = FALSE}
 mamba activate CADO
 
@@ -169,8 +172,6 @@ all.equal(colnames(input.all.rand.af), meta$sample_id)
 colnames(input.all.rand.af) <- meta$bio_label
 ```
 
-
-### PCA of random 10K loci from all samples 
 shows a strong pattern of population and experiment year (2023 – ARC2, NEH1, MV1, MV2; 2024 – NEH2, NEH3, MV3)
 ```{r}
 # Perform PCA
@@ -200,7 +201,7 @@ guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y =
 ggsave(filename = "PCA/ch1_pca_rand10k.png", plot = pca_rand10k, width = 6, height = 5, units = "in", dpi = 300)
 ```
 
-## PCA of random 10K loci from All Initial Samples
+### PCA of random 10K loci from All Initial Samples
 As expected, shows the same strong pattern of population and experiment year seen in the all sample plot
 ```{r}
 #subset data to only T0 initial samples
@@ -237,7 +238,7 @@ ggsave(filename = "PCA/ch1_pca_initial_rand10k.png", plot = pca_t0rand10k, width
 ```
 
 
-## Random loci for each individual experimental population (ARC, NEH, MV)
+#### Random loci for each individual experimental population (ARC, NEH, MV)
 ```{r}
 # Ensure meta is keyed by bio_label and in column order
 meta <- meta[match(colnames(input.all.rand.af), meta$bio_label), ]
@@ -317,7 +318,7 @@ for (pop in pops) {
 
 ```
 
-## Random loci for each individual experimental trial (ARC2, NEH1-3, MV1-3)
+#### Random loci for each individual experimental trial (ARC2, NEH1-3, MV1-3)
 ```{r}
 # Ensure meta is keyed by bio_label and in column order
 meta <- meta[match(colnames(input.all.rand.af), meta$bio_label), ]
@@ -395,7 +396,7 @@ for (trial in trials) {
 }
 ```
 
-## Venn Diagram for called, filtered loci between populations
+#### Venn Diagram for called, filtered loci between populations
 Haven't updated this code yet just adding in if I want to come back to it later.
 Right now it doesn't seem like this will be that informative as most of my variation is driven by trial (7 groups)
 ```{bash}
@@ -461,8 +462,9 @@ dev.off()
 
 
 
-# Population level outlier testing
 
+
+# Population level outlier testing
 ## ARC
 
 First normalize with initial sample coverage. The core logic is that the internal standard (IS) pools (the inital samples) act as a reference to normalize and cap coverage, ensuring that outlier detection downstream isn't driven by coverage artifacts rather than true allele frequency signals.
@@ -899,13 +901,16 @@ Qvalue_convert(MV.pval.table) ->MV.pv
 ```
 
 
-## Multi-tiered outlier filtering
+
+## Outlier filtering - 10% FDR, 5% FDR and 1% FDR datasets - we'll use the 1% dataset
 identify high-confidence candidate loci under selection due to stress across three populations
 ```{r}
 pp1 <- rbind(ARC.pv,NEH.pv,MV.pv)
 
+# Filter significant loci at FDR 10% threshold; also apply top 10% quantile filter within significant loci
 alpha = 0.1
 alpha2 =0.1
+
 
 ppsig.ARC.1 <- Significant_subset(ARC.pv,alpha,alpha2)
 ppsig.NEH.1 <- Significant_subset(NEH.pv,alpha,alpha2)
@@ -917,20 +922,21 @@ ppsig.MV.1$POP <- "MV"
 
 ppsig3.FDR10 <- bind_rows(ppsig.ARC.1,ppsig.NEH.1,ppsig.MV.1)
 
-all_sig.STR<- subset(ppsig3.FDR10, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>2)
-all_sig.STR$Sig.CON<- FALSE
+#all_sig.STR<- subset(ppsig3.FDR10, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>2)
+#all_sig.STR$Sig.CON<- FALSE
 
-write.table(all_sig.STR, "Sig.Loci.3", sep="\t", row.names = FALSE, quote = FALSE)
+#write.table(all_sig.STR, "Sig.Loci.3", sep="\t", row.names = FALSE, quote = FALSE)
 ```
 
 
 ```{r}
+# Filter significant loci at FDR 5% threshold; also apply top 10% quantile filter within significant loci
 alpha = 0.05
-NEH.alpha = alpha * 2
+#NEH.alpha = alpha * 2
 alpha2 =0.1
 
 ppsig.ARC.05 <- Significant_subset(ARC.pv,alpha,alpha2)
-ppsig.NEH.05 <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+ppsig.NEH.05 <- Significant_subset(NEH.pv,alpha,alpha2)
 ppsig.MV.05 <- Significant_subset(MV.pv,alpha,alpha2)
 
 ppsig.ARC.05$POP <- "ARC"
@@ -939,8 +945,8 @@ ppsig.MV.05$POP <- "MV"
 
 ppsig3.FDR05 <- rbind(ppsig.ARC.05,ppsig.NEH.05,ppsig.MV.05)
 
-multi_sig.STR<- subset(ppsig3.FDR05, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
-multi_sig.STR$Sig.CON <- FALSE
+#multi_sig.STR<- subset(ppsig3.FDR05, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
+#multi_sig.STR$Sig.CON <- FALSE
 
 #multi_sig.CA<- subset(ppsig3.FDR05, QCA < NEH.alpha) %>% group_by(SNP) %>% filter(n()>1)
 #multi_sig.CASE<- subset(ppsig3.FDR05, QCASE < NEH.alpha) %>% group_by(SNP) %>% filter(n()>1)
@@ -949,16 +955,18 @@ multi_sig.STR$Sig.CON <- FALSE
 #multi_sig <- rbind(ppsig3.FDR05 %>% group_by(SNP) %>% filter(n()>1))
 #multi_sig <- rbind(multi_sig.CA,multi_sig.CASE,multi_sig.SE)
 
-write.table(multi_sig.STR, "Sig.Loci.2", sep="\t", row.names = FALSE, quote = FALSE)
+#write.table(multi_sig.STR, "Sig.Loci.2", sep="\t", row.names = FALSE, quote = FALSE)
 ```
 
 ```{r}
+
+#Filter significant loci at 1% FDR threshold; and take the top 10% 
 alpha = 0.01
 alpha2 =0.1
-NEH.alpha = alpha *2
+#NEH.alpha = alpha *2
 
 ppsig.ARC.01 <- Significant_subset(ARC.pv,alpha,alpha2)
-ppsig.NEH.01 <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+ppsig.NEH.01 <- Significant_subset(NEH.pv,alpha,alpha2)
 ppsig.MV.01 <- Significant_subset(MV.pv,alpha,alpha2)
 ```
 
@@ -975,37 +983,53 @@ write.table(ppsig3.FDR01, "Sig.Loci.FDR01.1", sep="\t", row.names = FALSE, quote
 write.table(ppsig.ARC.01, "Sig.Loci.FDR01.ARC", sep="\t", row.names = FALSE, quote = FALSE)
 write.table(ppsig.NEH.01, "Sig.Loci.FDR01.NEH", sep="\t", row.names = FALSE, quote = FALSE)
 write.table(ppsig.MV.01, "Sig.Loci.FDR01.MV", sep="\t", row.names = FALSE, quote = FALSE)
-
-multi_sig.STR.01<- subset(ppsig3.FDR01, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
-multi_sig.STR.01$Sig.CON <- FALSE
-
-write.table(multi_sig.STR.01, "Sig.Loci.FDR01.2", sep="\t", row.names = FALSE, quote = FALSE)
-
-alpha = 0.01
-alpha2 =0.1
-NEH.alpha = alpha * 2
-
-
-ppsig.ARC <- Significant_subset(ARC.pv,alpha,alpha2)
-ppsig.ARC <- subset(ppsig.ARC, Sig.STR == TRUE & QSTR < quantile(ppsig.ARC$QSTR, na.rm = TRUE, probs = 0.01)
-                    )
-ppsig.NEH <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
-ppsig.NEH <- subset(ppsig.NEH, Sig.STR == TRUE & QSTR < quantile(ppsig.NEH$QSTR, na.rm = TRUE, probs = 0.01)
-                    )
-ppsig.MV <- Significant_subset(MV.pv,alpha,alpha2)
-ppsig.MV <- subset(ppsig.MV, Sig.STR == TRUE & QSTR < quantile(ppsig.MV$QSTR, na.rm = TRUE, probs = 0.01)
-                    )
-
-ppsig.ARC$POP <- "ARC"
-ppsig.NEH$POP <- "NEH"
-ppsig.MV$POP <- "MV"
-
-singleton <- read.table("singleton.loci",header=TRUE)
-
-ppsig1.s <- semi_join(rbind(ppsig.ARC,ppsig.NEH,ppsig.MV),singleton, by = "SNP")
 ```
 
-## Control filtering by block
+> nrow(ppsig.ARC.01)
+[1] 276
+> nrow(ppsig.NEH.01)
+[1] 2216
+> nrow(ppsig.MV.01)
+[1] 4180
+
+** I have filtered down to FDR of 1% **
+
+#### extra filtering steps that Jon
+I don't think I need these - they were used when Jon was building his all blocks total loci file. 
+For individual population analysis I don't think I need to include this addition filter. 
+```{r}
+# don't need this extra filtering - this would be used if I was combining the populations and analyzing them together
+# multi_sig.STR.01<- subset(ppsig3.FDR01, Sig.STR == "TRUE") %>% group_by(SNP) %>% filter(n()>1)
+# multi_sig.STR.01$Sig.CON <- FALSE
+# 
+# write.table(multi_sig.STR.01, "Sig.Loci.FDR01.2", sep="\t", row.names = FALSE, quote = FALSE)
+# 
+# alpha = 0.01
+# alpha2 =0.1
+# NEH.alpha = alpha * 2
+# 
+# 
+# ppsig.ARC <- Significant_subset(ARC.pv,alpha,alpha2)
+#ppsig.ARC <- subset(ppsig.ARC, Sig.STR == TRUE & QSTR < quantile(ppsig.ARC$QSTR, na.rm = TRUE, probs = 0.01)
+#                     )
+# ppsig.NEH <- Significant_subset(NEH.pv,NEH.alpha,alpha2)
+# ppsig.NEH <- subset(ppsig.NEH, Sig.STR == TRUE & QSTR < quantile(ppsig.NEH$QSTR, na.rm = TRUE, probs = 0.01)
+#                     )
+# ppsig.MV <- Significant_subset(MV.pv,alpha,alpha2)
+#ppsig.MV <- subset(ppsig.MV, Sig.STR == TRUE & QSTR < quantile(ppsig.MV$QSTR, na.rm = TRUE, probs = 0.01)
+#                     )
+# 
+# ppsig.ARC$POP <- "ARC"
+# ppsig.NEH$POP <- "NEH"
+# ppsig.MV$POP <- "MV"
+# 
+# singleton <- read.table("singleton.loci",header=TRUE)
+# 
+# ppsig1.s <- semi_join(rbind(ppsig.ARC,ppsig.NEH,ppsig.MV),singleton, by = "SNP")
+```
+
+
+## Control filtering by population
 ```{r}
 # ARC
 conpp.ARC <- subset(ARC.pv, QCON < 0.001)
@@ -1024,9 +1048,9 @@ write.table(allcon.MV, "MV.ALL.CON.SNPS", sep="\t", row.names=FALSE, quote=FALSE
 ```
 
 ```{r}
-total.sig.ARC <- anti_join(ppsig.ARC, allcon.ARC, by = "SNP")
-total.sig.NEH <- anti_join(ppsig.NEH, allcon.NEH, by = "SNP")
-total.sig.MV  <- anti_join(ppsig.MV,  allcon.MV,  by = "SNP")
+total.sig.ARC <- anti_join(ppsig.ARC.01, allcon.ARC, by = "SNP")
+total.sig.NEH <- anti_join(ppsig.NEH.01, allcon.NEH, by = "SNP")
+total.sig.MV  <- anti_join(ppsig.MV.01,  allcon.MV,  by = "SNP")
 
 write.table(total.sig.ARC, "Total.Significant.uf.Loci.ARC", sep="\t", row.names=FALSE, quote=FALSE)
 write.table(total.sig.NEH, "Total.Significant.uf.Loci.NEH", sep="\t", row.names=FALSE, quote=FALSE)
@@ -1071,7 +1095,7 @@ done
 ```{r}
 library(dplyr)
 
-pops <- c("NEH", "MV")
+pops <- c("ARC", "NEH", "MV")
 
 for (pop in pops) {
 
@@ -1084,14 +1108,13 @@ for (pop in pops) {
 
   write.table(total.sig,
               paste0("Total.Significant.Loci.", pop),
-              sep = "\t", row.names = FALSE, quote = FALSE)
+              sep = "\t", row.names = FALSE,  quote = FALSE)
 }
-
-# note ARC did not have any loci to filter out
 ```
 
 
 #### Can do BED conversion here and GO enrichment, but skipping for now
+
 
 
 # Manhattan Plots
@@ -1102,15 +1125,16 @@ library(dplyr)
 library(ggplot2)
 library(patchwork)
 
-make_manhattan_plot <- function(pv_data, sig_data, con_filter, allcon, pop_name,
+make_manhattan_plot <- function(pv_data, sig_data, con_sig, con_filter, allcon, pop_name,
                                 outlier_color, y_limit = NULL) {
   
   pv_data <- pv_data %>%
     mutate(
       Group = case_when(
+        SNP %in% con_sig$SNP ~ "Control Treatment Filtered",
         SNP %in% con_filter$SNP ~ "Control Treatment Filtered",
         SNP %in% allcon$SNP ~ "Control Treatment Filtered",
-        TRUE ~ "Shared SNP"
+        TRUE ~ "Neutral"
       )
     )
   
@@ -1122,7 +1146,7 @@ make_manhattan_plot <- function(pv_data, sig_data, con_filter, allcon, pop_name,
     bp = "BP",
     relative.positions = TRUE,
     sigLine = NA,
-    pointSize = 1.5,
+    pointSize = 3,
     title = "",
     alpha = 0.5
   )
@@ -1162,8 +1186,25 @@ make_manhattan_plot <- function(pv_data, sig_data, con_filter, allcon, pop_name,
     scale_alpha_continuous(range = c(0.05, 0.8), limits = c(0, 50)) +
     ggtitle(pop_name) +
     labs(x = "Chromosome", y = expression(-Log10(q-value))) +
-    theme_classic() +
-    scale_shape_manual(values = c(15, 21, 16, 17)) +
+    #theme_classic() +
+    theme_minimal() +
+  theme(
+    legend.text = element_text(color= "black"),
+    legend.title = element_text(color="black"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=14, color="black"),
+    axis.text=element_text(size=12, color="black"), 
+    axis.text.x = element_text(size = 12),
+    axis.ticks = element_line(color="black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
+    scale_shape_manual(values = c(15, 21, 21, 17)) +
     scale_color_manual(values = c("grey", "dark grey"), guide = FALSE) +
     guides(shape = guide_legend(override.aes = list(color = "grey", size = 5, linetype = 0)))
   
@@ -1177,56 +1218,160 @@ arc_con_filter <- read.table("ToFilter.Con.Loci.ARC.txt", header = TRUE)
 neh_con_filter <- read.table("ToFilter.Con.Loci.NEH.txt", header = TRUE)
 mv_con_filter  <- read.table("ToFilter.Con.Loci.MV.txt",  header = TRUE)
 
-arc.h <- subset(total.sig.ARC, Sig.STR == TRUE)
-neh.h <- subset(total.sig.NEH, Sig.STR == TRUE)
-mv.h  <- subset(total.sig.MV,  Sig.STR == TRUE)
+#load in control filtered 1% FDR loci for each population
+total.sig.ARC.filt <- read.table("Total.Significant.Loci.ARC", header = TRUE)
+total.sig.NEH.filt <- read.table("Total.Significant.Loci.NEH", header = TRUE)
+total.sig.MV.filt <- read.table("Total.Significant.Loci.MV", header = TRUE)
+```
+
+> nrow(total.sig.ARC)
+[1] 276
+> nrow(total.sig.ARC.filt)
+[1] 268 control filtered outliers (p<0.01)
+> nrow(total.sig.NEH)
+[1] 2216
+> nrow(total.sig.NEH.filt)
+[1] 1321 control filtered outliers (p<0.01)
+> nrow(total.sig.MV)
+[1] 4180
+> nrow(total.sig.MV.filt)
+[1] 2627 control filtered outliers (p<0.01)
+
+
+```{r}
+arc.h <- subset(total.sig.ARC.filt, Sig.STR == TRUE)
+neh.h <- subset(total.sig.NEH.filt, Sig.STR == TRUE)
+mv.h  <- subset(total.sig.MV.filt,  Sig.STR == TRUE)
+
+arc.c <- subset(ARC.pv, QCON < 0.1)
+neh.c <- subset(NEH.pv, QCON < 0.1)
+mv.c <- subset(MV.pv, QCON < 0.1)
 
 arc_res <- make_manhattan_plot(
   pv_data = ARC.pv,
   sig_data = arc.h,
+  con_sig = arc.c,
   con_filter = arc_con_filter,
   allcon = allcon.ARC,
   pop_name = "ARC",
   outlier_color = "#3F8F7A"
-)
+);arc_res
 
 neh_res <- make_manhattan_plot(
   pv_data = NEH.pv,
   sig_data = neh.h,
+  con_sig = neh.c,
   con_filter = neh_con_filter,
   allcon = allcon.NEH,
   pop_name = "NEH",
   outlier_color = "#D8848A",
   y_limit = 60
-)
+);neh_res
 
 mv_res <- make_manhattan_plot(
   pv_data = MV.pv,
   sig_data = mv.h,
+  con_sig = mv.c,
   con_filter = mv_con_filter,
   allcon = allcon.MV,
   pop_name = "MV",
   outlier_color = "#5F7BAA"
+);mv_res
+```
+
+```{r}
+#strip legends
+arc_res_nl <- arc_res$plot + theme(legend.position = "none")
+neh_res_nl <- neh_res$plot + theme(legend.position = "none")
+mv_res_nl <- mv_res$plot + theme(legend.position = "none")
+
+# save individual plots
+ggsave(filename = "ManhattanPlots/ARC_manhattan.png", plot= arc_res_nl, width = 10, height = 3, dpi = 300, bg= "transparent")
+ggsave(filename = "ManhattanPlots/NEH_manhattan.png", plot= neh_res_nl, width = 10, height = 3, dpi = 300, bg= "transparent")
+ggsave(filename = "ManhattanPlots/MV_manhattan.png", plot= mv_res_nl, width = 10, height = 3, dpi = 300, bg= "transparent")
+```
+
+```{r}
+library(ggplot2)
+
+legend_df <- data.frame(
+  x = 1,
+  y = c(1.25, 1.0, 0.75, 0.5, 0.25),
+  lab = c("Control Treatment Filtered",
+          "Neutral",
+          "ARC outlier",
+          "NEH outlier",
+          "MV outlier")
 )
 
+legend_plot <- ggplot(legend_df, aes(x = x, y = y)) +
+  geom_text(aes(x = x + 0.001, y = y, label = lab),
+  hjust = 0, size = 3,
+  color= "black") +
+  # control
+  geom_point(
+    data = subset(legend_df, lab == "Control Treatment Filtered"),
+    shape = 15, size = 3, colour = "grey"
+  ) +
+  # neutral
+  geom_point(
+    data = subset(legend_df, lab == "Neutral"),
+    shape = 1, size = 3, colour = "grey"
+  ) +
+  # 
+  geom_point(
+    data = subset(legend_df, lab == "ARC outlier"),
+    shape = 21, size = 3,
+    #colour = "grey20", 
+    color = "black",
+    fill = "#3F8F7A", stroke = 0.5
+  ) +
+  # 
+  geom_point(
+    data = subset(legend_df, lab == "NEH outlier"),
+    shape = 21, size = 3,
+    #colour = "grey20", 
+    color = "black", 
+    fill = "#D8848A", stroke = 0.5
+  ) +
+  # 
+  geom_point(
+    data = subset(legend_df, lab == "MV outlier"),
+    shape = 21, size = 3,
+    #colour = "grey20", 
+    color = "black", 
+    fill = "#5F7BAA", stroke = 0.5
+  ) +
+  xlim(0.999, 1.015) +
+  ylim(0.1, 1.75) +
+  theme_void()
+  #ggtitle("Group")
+
+print(legend_plot)
+
+ggsave(filename = "ManhattanPlots/LEGEND_manhattan.png", plot= legend_plot, width = 5, height = 5, dpi = 300, bg= "transparent")
 ```
 
 
 ```{r}
+design <- "
+AAAA#
+BBBBD
+CCCC#
+"
+arc_tag <- arc_res_nl + labs(tag = "a)")
+neh_tag <- neh_res_nl + labs(tag = "b)")
+mv_tag <- mv_res_nl + labs(tag = "c)")
+
+
 png(filename = "ManhattanPlots/All_Populations_Manhattan.png", 
-    units = "in", width = 10, height = 6,  res = 300, bg = "transparent")
-arc_res$plot / neh_res$plot / mv_res$plot +
-  plot_annotation(tag_levels = "A") +
-  plot_layout(guides = "collect") 
+    units = "in", width = 10, height = 8,  res = 300, bg = "transparent")
+arc_tag + neh_tag + mv_tag + legend_plot +
+  plot_layout(design = design) +
+  plot_annotation(theme = theme(plot.background = element_rect(fill = "transparent", colour = NA)))
 dev.off()
 ```
 
-> nrow(total.sig.ARC)
-> [1] 3 outliers
-> nrow(total.sig.MV)
-> [1] 42 outliers
-> nrow(total.sig.NEH)
-> [1] 35 outliers
 
 
 ## ARC - Outlier Manhattan Plot
@@ -1426,33 +1571,225 @@ ggsave(
 
 
 
-I want to set my own population specific colors cbPaletteSmall3 <- c("#3F8F7A", "#D8848A", "#5F7BAA")
 
 
 
-# Venn Diagrams
 
 
-# PCA
+
+
+
+
+# Overlap in outlier loci
+```{r}
+library(dplyr)
+
+arc <- read.table("Total.Significant.Loci.ARC", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+neh <- read.table("Total.Significant.Loci.NEH", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+mv  <- read.table("Total.Significant.Loci.MV",  header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+arc_sig <- unique(arc$SNP)
+neh_sig <- unique(neh$SNP)
+mv_sig  <- unique(mv$SNP)
+```
+
+```{r}
+# All three populations
+shared_all <- Reduce(intersect, list(arc_sig, neh_sig, mv_sig))
+shared_all
+
+# Pairwise overlaps
+shared_arc_neh <- intersect(arc_sig, neh_sig)
+shared_arc_mv  <- intersect(arc_sig, mv_sig)
+shared_neh_mv  <- intersect(neh_sig, mv_sig)
+
+# Counts
+length(shared_all)
+length(shared_arc_neh)
+length(shared_arc_mv)
+length(shared_neh_mv)
+
+# Example: loci shared by ARC and NEH but not MV
+arc_neh_only <- setdiff(shared_arc_neh, mv_sig)
+length(arc_neh_only)
+
+```
+
+summary table
+```{r}
+overlap_summary <- data.frame(
+  comparison = c("ARC_NEH", "ARC_MV", "NEH_MV", "ALL_THREE"),
+  n_loci = c(
+    length(shared_arc_neh),
+    length(shared_arc_mv),
+    length(shared_neh_mv),
+    length(shared_all)
+  )
+)
+
+overlap_summary
+```
+
+### Outlier Venn Diagram
+```{r}
+library(VennDiagram)
+library(grid)
+
+arc <- read.table("Total.Significant.Loci.ARC", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+neh <- read.table("Total.Significant.Loci.NEH", header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+mv  <- read.table("Total.Significant.Loci.MV",  header = TRUE, sep = "\t", stringsAsFactors = FALSE)
+
+arc_sig <- unique(arc$SNP)
+neh_sig <- unique(neh$SNP)
+mv_sig  <- unique(mv$SNP)
+
+venn.plot.outlier <- venn.diagram(
+  x = list(
+    ARC = arc_sig,
+    NEH = neh_sig,
+    MV  = mv_sig
+  ),
+  filename = NULL,
+  fill = c("#3F8F7A", "#D8848A", "#5F7BAA"),
+  alpha = 0.5,
+  cex = 1.5,
+  cat.cex = 1.3,
+  fontface = "plain",
+  cat.fontface = "bold",
+  cat.pos = c(315, 45, 0),
+  cat.dist = c(0.05, 0.05, 0.05),
+  margin = 0.02
+)
+
+grid.newpage()
+grid.draw(venn.plot.outlier)
+
+png("allpop_outliers_Venn.png", width = 2000, height = 2000, res = 300,  bg = "transparent")
+grid.newpage()
+grid.draw(venn.plot.outlier)
+grid.text(
+  "Shared candidate loci across populations",
+  x = 0.5, y = 0.97,
+  gp = gpar(fontsize = 18, fontface = "bold"))
+dev.off()
+```
+
+
+
+
+# Outlier PCA 
 PCAs on outliers from different populations
 
-
 ## ARC
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' Total.Significant.Loci.ARC | cut -f2,3 | sort | uniq > TSL.pca.filter.ARC
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' TSL.pca.filter.ARC ARC.dp25.cov.sync | cut --complement -f13- > ARC.outlier.pca.sync
+```
+
+```{r}
+# Read sync file of significant outlier loci for outlier PCA
+ARC.input.all.outlier <- read.sync(file="ARC.outlier.pca.sync", gen=seq(1,9), repl=seq(1,9), polarization="rising")
+ARC.input.all.outlier.af <- af(ARC.input.all.outlier,gen=seq(1,9), repl=seq(1,9))
+
+ARC.labels <- c(
+  "ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03"
+)
+length(ARC.labels)  # should be 9
+
+pop.ids <- colnames(ARC.input.all.outlier.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = ARC.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^NEH",  meta$bio_label),  "NEH",
+                          ifelse(grepl("^MV", meta$bio_label), "MV", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(ARC.input.all.outlier.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.outlier.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(ARC.input.all.outlier.af) <- meta$bio_label
+```
+
+```{r}
+# Perform PCA
+af_t <- t(ARC.input.all.outlier.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.outlier.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+outpca_arc <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(#aes(alpha=0.2), 
+             size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    legend.text = element_text(color= "black", size = 20),
+    legend.title = element_text(color="black", size = 20),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=20, color="black"),
+    axis.text=element_text(size=20, color="black"), 
+    axis.text.x = element_text(size = 20),
+    title = element_text(size = 20),
+    axis.ticks = element_line(color="black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Outlier Loci (ARC)"
+  ); outpca_arc
+
+ggsave(filename = "PCA/outlier_PCA_ARC.png", plot = outpca_arc, width = 6, height = 5, units = "in", dpi = 300)
+```
 
 ## NEH
 ```{bash, eval = FALSE}
 # Activate the CASE conda environment
 source activate CADO
 
-mawk '!/CHR/' Total.Significant.Loci.NEH | cut -f2,3 | sort | uniq > TSL.pca.filter
+mawk '!/CHR/' Total.Significant.Loci.NEH | cut -f2,3 | sort | uniq > TSL.pca.filter.NEH
 
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' TSL.pca.filter NEH.dp25.cov.sync | cut --complement -f31- > outlier.pca.sync
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' TSL.pca.filter.NEH NEH.dp25.cov.sync | cut --complement -f31- > NEH.outlier.pca.sync
 ```
 
 ```{r}
 # Read sync file of significant outlier loci for outlier PCA
-input.all.outlier <- read.sync(file="outlier.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
-input.all.outlier.af <- af(input.all.outlier,gen=seq(1,27), repl=seq(1,27))
+NEH.input.all.outlier <- read.sync(file="NEH.outlier.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
+NEH.input.all.outlier.af <- af(NEH.input.all.outlier,gen=seq(1,27), repl=seq(1,27))
 
 NEH.labels <- c(
   "NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
@@ -1461,11 +1798,205 @@ NEH.labels <- c(
 )
 length(NEH.labels)  # should be 27
 
-pop.ids <- colnames(input.all.outlier.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+pop.ids <- colnames(NEH.input.all.outlier.af)  # "F1.R1.freq", ..., "F63.R63.freq"
 
 meta <- data.frame(
   sample_id   = pop.ids,
   bio_label   = NEH.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^NEH",  meta$bio_label),  "NEH",
+                          ifelse(grepl("^MV", meta$bio_label), "MV", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(NEH.input.all.outlier.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.outlier.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(NEH.input.all.outlier.af) <- meta$bio_label
+```
+
+```{r}
+# Perform PCA
+af_t <- t(NEH.input.all.outlier.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.outlier.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+outpca_neh <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(#aes(alpha=0.2), 
+             size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+  annotate("text", x = -30, y = 3, label = "NEH1", color = "black", size = 5) +
+  annotate("text", x = -3, y = -20, label = "NEH3", color = "black", size = 5) +
+  annotate("text", x = 22, y = 6, label = "NEH2", color = "black", size = 5) +
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    legend.text = element_text(color= "black", size = 20),
+    legend.title = element_text(color="black", size = 20),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=20, color="black"),
+    axis.text=element_text(size=20, color="black"), 
+    axis.text.x = element_text(size = 20),
+    title = element_text(size = 20),
+    axis.ticks = element_line(color="black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Outlier Loci (NEH)"
+  )
+outpca_neh
+ggsave(filename = "PCA/outlier_PCA_NEH.png", plot = outpca_neh, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+## NEH1-3 trials
+```{r}
+# Ensure meta is keyed by bio_label and in column order
+meta <- meta[match(colnames(NEH.input.all.outlier.af), meta$bio_label), ]
+stopifnot(all(meta$bio_label == colnames(NEH.input.all.outlier.af)))
+
+trials <- c("NEH1", "NEH2", "NEH3")
+
+for (trial in trials) {
+  # select columns belonging to this population
+  cols_idx <- which(meta$trial == trial)
+  cat(sprintf("\n== Population %s: found %d sample columns ==\n", trial, length(cols_idx)))
+  if (length(cols_idx) < 2) {
+    warning(sprintf("Population %s: less than 2 samples found - skipping PCA.", trial))
+    next
+  }
+
+  sub_mat <- NEH.input.all.outlier.af[, cols_idx, drop = FALSE]
+  cat("  dim(sub_mat) (loci x samples):", dim(sub_mat), "\n")
+
+  # transpose: rows = samples, cols = loci
+  mat_t <- t(sub_mat)
+
+  # drop zero-variance loci within this population
+  var_cols <- apply(mat_t, 2, var, na.rm = TRUE)
+  keep     <- which(var_cols > 0)
+  removed_n <- sum(var_cols == 0)
+  cat("  loci removed (zero variance):", removed_n, "\n")
+
+  if (length(keep) < 2) {
+    warning(sprintf("Trial %s: fewer than 2 variable loci after filtering - skipping PCA.", trial))
+    next
+  }
+  mat_t2 <- mat_t[, keep, drop = FALSE]
+  cat("  dim(mat_t2) (samples x retained loci):", dim(mat_t2), "\n")
+
+  # PCA
+  pca_res <- prcomp(mat_t2, center = TRUE, scale. = TRUE)
+  pca_df  <- as.data.frame(pca_res$x)
+
+  # add metadata for these samples
+  sample_labels <- rownames(mat_t2)                      # bio_labels
+  sample_meta   <- meta[match(sample_labels, meta$bio_label), ]
+
+  pca_df$population <- sample_meta$population            # should all be 'pop'
+  pca_df$treatment  <- sample_meta$treatment             # T0 / CB / SB
+  pca_df$bio_label  <- sample_meta$bio_label
+  pca_df$trial <- sample_meta$trial
+
+  var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
+
+  # palette for treatment or population; here color by treatment
+  if (exists("treatPalette")) {
+    fill_scale <- scale_fill_manual(values = treatPalette, name = "Treatment")
+  } else {
+    fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
+  }
+
+  # plot: within a population, color by treatment
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = treatment, fill=treatment)) +
+  geom_point(#aes(alpha=0.2), 
+             size =7,shape=21, col="white")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    legend.text = element_text(color= "white"),
+    legend.title = element_text(color="white"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=12, color="white"),
+    axis.text=element_text(size=12, color="white"), 
+    axis.text.x = element_text(size = 12),
+    axis.ticks = element_line(color="white"),
+    panel.border = element_rect(color = "white", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)")
+  )
+  outfile <- paste0("PCA/PCA_trial_", trial, ".png")
+  ggsave(outfile, plot = p, width = 6, height = 5, units = "in", dpi = 300)
+  cat("  saved:", outfile, "\n")
+}
+```
+
+
+
+## MV
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' Total.Significant.Loci.MV | cut -f2,3 | sort | uniq > TSL.pca.filter.MV
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' TSL.pca.filter.MV MV.dp25.cov.sync | cut --complement -f31- > MV.outlier.pca.sync
+```
+
+```{r}
+# Read sync file of significant outlier loci for outlier PCA
+MV.input.all.outlier <- read.sync(file="MV.outlier.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
+MV.input.all.outlier.af <- af(MV.input.all.outlier,gen=seq(1,27), repl=seq(1,27))
+
+MV.labels <- c(
+  "MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+  "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+  "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03"
+)
+length(MV.labels)  # should be 27
+
+pop.ids <- colnames(MV.input.all.outlier.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = MV.labels,
   stringsAsFactors = FALSE
 )
 
@@ -1481,18 +2012,16 @@ meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
 View(meta)
 
 #check that column names in input.all.rand.af and sample_id column in meta table are the same
-all.equal(colnames(input.all.outlier.af), meta$sample_id)
+all.equal(colnames(MV.input.all.outlier.af), meta$sample_id)
 # should be TRUE
 
 # assign the columns of input.all.outlier.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
-colnames(input.all.outlier.af) <- meta$bio_label
+colnames(MV.input.all.outlier.af) <- meta$bio_label
 ```
-
-
 
 ```{r}
 # Perform PCA
-af_t <- t(input.all.outlier.af)
+af_t <- t(MV.input.all.outlier.af)
 
 # Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
 pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
@@ -1507,39 +2036,679 @@ var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
 pca_df$Treatment <- meta$treatment
 pca_df$Trial <- meta$trial
 
-ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
-  geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+  
+outpca_mv <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(#aes(alpha=0.2), 
+             size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+  annotate("text", x = -25, y = -17, label = "MV1", color = "black", size = 5) +
+  annotate("text", x = -17, y = 30, label = "MV2", color = "black", size = 5) +
+  annotate("text", x = 35, y = 13, label = "MV3", color = "black", size = 5) +
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    legend.text = element_text(color= "black", size=20),
+    legend.title = element_text(color="black", size = 20),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=20, color="black"),
+    axis.text=element_text(size=20, color="black"), 
+    axis.text.x = element_text(size = 20),
+    title = element_text(size = 20),
+    axis.ticks = element_line(color="black"),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Outlier Loci (MV)"
+  )
+outpca_mv
+
+ggsave(filename = "PCA/outlier_PCA_MV.png", plot = outpca_mv, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+## MV1-3 trials
+```{r}
+# Ensure meta is keyed by bio_label and in column order
+meta <- meta[match(colnames(MV.input.all.outlier.af), meta$bio_label), ]
+stopifnot(all(meta$bio_label == colnames(MV.input.all.outlier.af)))
+
+trials <- c("MV1", "MV2", "MV3")
+
+for (trial in trials) {
+  # select columns belonging to this population
+  cols_idx <- which(meta$trial == trial)
+  cat(sprintf("\n== Population %s: found %d sample columns ==\n", trial, length(cols_idx)))
+  if (length(cols_idx) < 2) {
+    warning(sprintf("Population %s: less than 2 samples found - skipping PCA.", trial))
+    next
+  }
+
+  sub_mat <- MV.input.all.outlier.af[, cols_idx, drop = FALSE]
+  cat("  dim(sub_mat) (loci x samples):", dim(sub_mat), "\n")
+
+  # transpose: rows = samples, cols = loci
+  mat_t <- t(sub_mat)
+
+  # drop zero-variance loci within this population
+  var_cols <- apply(mat_t, 2, var, na.rm = TRUE)
+  keep     <- which(var_cols > 0)
+  removed_n <- sum(var_cols == 0)
+  cat("  loci removed (zero variance):", removed_n, "\n")
+
+  if (length(keep) < 2) {
+    warning(sprintf("Trial %s: fewer than 2 variable loci after filtering - skipping PCA.", trial))
+    next
+  }
+  mat_t2 <- mat_t[, keep, drop = FALSE]
+  cat("  dim(mat_t2) (samples x retained loci):", dim(mat_t2), "\n")
+
+  # PCA
+  pca_res <- prcomp(mat_t2, center = TRUE, scale. = TRUE)
+  pca_df  <- as.data.frame(pca_res$x)
+
+  # add metadata for these samples
+  sample_labels <- rownames(mat_t2)                      # bio_labels
+  sample_meta   <- meta[match(sample_labels, meta$bio_label), ]
+
+  pca_df$population <- sample_meta$population            # should all be 'pop'
+  pca_df$treatment  <- sample_meta$treatment             # T0 / CB / SB
+  pca_df$bio_label  <- sample_meta$bio_label
+  pca_df$trial <- sample_meta$trial
+
+  var_explained <- (pca_res$sdev^2) / sum(pca_res$sdev^2) * 100
+
+  # palette for treatment or population; here color by treatment
+  if (exists("treatPalette")) {
+    fill_scale <- scale_fill_manual(values = treatPalette, name = "Treatment")
+  } else {
+    fill_scale <- scale_fill_brewer(palette = "Set1", name = "Treatment")
+  }
+
+  # plot: within a population, color by treatment
+  p <- ggplot(pca_df, aes(x = PC1, y = PC2, color = treatment, fill=treatment)) +
+  geom_point(#aes(alpha=0.2), 
+             size =7,shape=21, col="white")+  
   scale_fill_manual(values=treatPalette,name="Treatment")+ 
 guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
   theme_minimal() +
+  theme(
+    legend.text = element_text(color= "white"),
+    legend.title = element_text(color="white"),
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    axis.title=element_text(face="bold", size=12, color="white"),
+    axis.text=element_text(size=12, color="white"), 
+    axis.text.x = element_text(size = 12),
+    axis.ticks = element_line(color="white"),
+    panel.border = element_rect(color = "white", fill = NA, linewidth = 1),
+    panel.background = element_rect(fill = "transparent", colour = NA),
+    plot.background  = element_rect(fill = "transparent", colour = NA),
+    legend.background    = element_rect(fill = "transparent", colour = NA),
+    legend.box.background = element_rect(fill = "transparent", colour = NA)
+    ) +
   labs(
     x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
-    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
-    title = "PCA of Allele Frequencies"
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)")
   )
+  outfile <- paste0("PCA/PCA_trial_", trial, ".png")
+  ggsave(outfile, plot = p, width = 6, height = 5, units = "in", dpi = 300)
+  cat("  saved:", outfile, "\n")
+}
+```
 
+
+## Composite Outlier PCA with 3 pops
+```{r}
+outpca_design <- "AAABBBCCC"
+
+allpop_outpca <- (outpca_arc + outpca_neh + outpca_mv) +
+  plot_layout(design = outpca_design, guides = "collect") +
+  plot_annotation(tag_levels = "a", tag_suffix = ")",
+                  theme = theme(
+      plot.background = element_rect(fill = "transparent", colour = NA)
+    )
+  ) &
+  theme(
+    plot.tag = element_text(color = "black")  # set a), b), c) to white
+  ) 
+print(allpop_outpca)
+
+# Export to PNG at a specific size
+ggsave("PCA/outlier_pca_allpopcomposite.png", plot = allpop_outpca, width = 17.5, height =5, units = "in", dpi = 300, bg = "transparent")
+```
+
+
+
+# Outlier Fst tables
+## Pairwise Fst
+
+```{r}
+library(poolfstat)
+```
+
+Construct outlier sync files for each population!
+```{bash, eval=FALSE}
+
+#ARC 
+#pull CHROM & BP from outlier loci file and sorts them into position file
+# keeps header from sync file and prints only rows whose "CHROM"_"POS" matches the positions file 
+awk 'BEGIN{FS=OFS="\t"} NR>1{print $2,$3}' Total.Significant.Loci.ARC | sort -u > ARC.outlier.positions.txt && awk 'BEGIN{FS=OFS="\t"} NR==FNR{if(FNR>1) keep[$1"_"$2]=1; next} FNR==1 || ($1"_"$2 in keep)' ARC.outlier.positions.txt ARC.dp25.cov.sync > ARC.outliers.only.sync
+# NEH
+awk 'BEGIN{FS=OFS="\t"} NR>1{print $2,$3}' Total.Significant.Loci.NEH | sort -u > NEH.outlier.positions.txt && awk 'BEGIN{FS=OFS="\t"} NR==FNR{if(FNR>1) keep[$1"_"$2]=1; next} FNR==1 || ($1"_"$2 in keep)' NEH.outlier.positions.txt NEH.dp25.cov.sync > NEH.outliers.only.sync
+#MV
+awk 'BEGIN{FS=OFS="\t"} NR>1{print $2,$3}' Total.Significant.Loci.MV | sort -u > MV.outlier.positions.txt && awk 'BEGIN{FS=OFS="\t"} NR==FNR{if(FNR>1) keep[$1"_"$2]=1; next} FNR==1 || ($1"_"$2 in keep)' MV.outlier.positions.txt MV.dp25.cov.sync > MV.outliers.only.sync
+
+#check that these match the correct # of outliers
+wc -l ARC.outliers.only.sync 
+wc -l NEH.outliers.only.sync
+wc -l MV.outliers.only.sync
+
+#remove extra lines with coverage stats
+awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' ARC.outliers.only.sync > ARC.outliers.only.nocov.sync
+awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' NEH.outliers.only.sync > NEH.outliers.only.nocov.sync
+awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' MV.outliers.only.sync > MV.outliers.only.nocov.sync
+
+# remove header line 
+mawk '!/CHR/' ARC.outliers.only.nocov.sync > ARC.total.outlier.input
+mawk '!/CHR/' NEH.outliers.only.nocov.sync > NEH.total.outlier.input
+mawk '!/CHR/' MV.outliers.only.nocov.sync > MV.total.outlier.input
+```
+
+
+## ARC
+```{r}
+##Using sync file with outlier for each population 
+out_ARC_samples <- c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03")
+
+out_ARCdstbn <- popsync2pooldata("ARC.total.outlier.input", poolsizes = c(40000, 40000, 40000, 40000,
+                                                                          40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = out_ARC_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+out_ARCdstbn_SNPFst <- computeFST(out_ARCdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+out_ARCdstbn_Fst <- compute.pairwiseFST(out_ARCdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+out_ARCdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(out_ARCdstbn_Fst@PairwiseFSTmatrix))
+
+ARC_Fst <- out_ARCdstbn_PairwiseFSTMatrix[c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03"), c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03")]
+write.csv(ARC_Fst, "ARC_Fst_Outliers.csv")
+```
+
+## NEH
+```{r}
+##Using sync file with outlier for each population 
+out_NEH_samples <- c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03")
+
+#update poolsizes to reflect 27 samples
+out_NEHdstbn <- popsync2pooldata("NEH.total.outlier.input", poolsizes = c(20000,20000, 20000, 20000, 20000, 20000,40000, 40000, 40000, 
+                                                                          20000,20000, 20000, 20000, 20000, 20000,40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = out_NEH_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+out_NEHdstbn_SNPFst <- computeFST(out_NEHdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+out_NEHdstbn_Fst <- compute.pairwiseFST(out_NEHdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+out_NEHdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(out_NEHdstbn_Fst@PairwiseFSTmatrix))
+
+NEH_Fst <- out_NEHdstbn_PairwiseFSTMatrix[c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03"), c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03")]
+write.csv(NEH_Fst, "NEH_Fst_Outliers.csv")
+```
+
+## MV
+```{r}
+##Using sync file with outlier for each population 
+out_MV_samples <- c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03")
+
+#update poolsizes to reflect 27 samples
+out_MVdstbn <- popsync2pooldata("MV.total.outlier.input", poolsizes = c(40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = out_MV_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+out_MVdstbn_SNPFst <- computeFST(out_MVdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+out_MVdstbn_Fst <- compute.pairwiseFST(out_MVdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+out_MVdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(out_MVdstbn_Fst@PairwiseFSTmatrix))
+
+MV_Fst <- out_MVdstbn_PairwiseFSTMatrix[c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03"), c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03")]
+write.csv(MV_Fst, "MV_Fst_Outliers.csv")
+```
+
+
+
+# Neutral loci
+### Prep Neutral loci files
+Make neutral loci sync files for each population
+```{bash, eval=FALSE}
+# ARC
+awk 'BEGIN{FS=OFS="\t"} { NF-=3; print }' ARC.dp25.cov.sync > ARC.dp25.cov.noStats.sync
+awk 'NR==FNR { if (FNR>1) bad[$1]=1; next }
+     FNR==1 { print; next }
+    { key=$1"_"$2; if (!(key in bad)) print }' \
+Total.Significant.Loci.ARC ARC.dp25.cov.noStats.sync > ARC.neutral.only.sync
+
+#NEH
+awk 'BEGIN{FS=OFS="\t"} { NF-=3; print }' NEH.dp25.cov.sync > NEH.dp25.cov.noStats.sync
+awk 'NR==FNR { if (FNR>1) bad[$1]=1; next }
+     FNR==1 { print; next }
+    { key=$1"_"$2; if (!(key in bad)) print }' \
+Total.Significant.Loci.NEH NEH.dp25.cov.noStats.sync > NEH.neutral.only.sync
+
+#MV
+awk 'BEGIN{FS=OFS="\t"} { NF-=3; print }' MV.dp25.cov.sync > MV.dp25.cov.noStats.sync
+awk 'NR==FNR { if (FNR>1) bad[$1]=1; next }
+     FNR==1 { print; next }
+    { key=$1"_"$2; if (!(key in bad)) print }' \
+Total.Significant.Loci.MV MV.dp25.cov.noStats.sync > MV.neutral.only.sync
+```
+
+```{bash}
+wc -l ARC.neutral.only.sync
+wc -l NEH.neutral.only.sync
+wc -l MV.neutral.only.sync
+```
+
+## Neutral Loci Fst
+```{bash}
+#remove extra lines with coverage stats
+#awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' ARC.neutral.only.sync > ARC.neutral.only.nocov.sync
+#awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' NEH.neutral.only.sync > NEH.neutral.only.nocov.sync
+#awk 'BEGIN{FS=OFS="\t"} {NF-=3; print}' MV.neutral.only.sync > MV.neutral.only.nocov.sync
+
+# remove header line 
+mawk '!/CHR/' ARC.neutral.only.sync > ARC.total.neutral.input
+mawk '!/CHR/' NEH.neutral.only.sync > NEH.total.neutral.input
+mawk '!/CHR/' MV.neutral.only.sync > MV.total.neutral.input
+```
+
+
+### ARC
+```{r}
+##Using sync file with neutral for each population 
+neut_ARC_samples <- c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03")
+
+neut_ARCdstbn <- popsync2pooldata("ARC.total.neutral.input", poolsizes = c(40000, 40000, 40000, 40000,
+                                                                          40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = neut_ARC_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+neut_ARCdstbn_SNPFst <- computeFST(neut_ARCdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+neut_ARCdstbn_Fst <- compute.pairwiseFST(neut_ARCdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+neut_ARCdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(neut_ARCdstbn_Fst@PairwiseFSTmatrix))
+
+ARC_Fst <- neut_ARCdstbn_PairwiseFSTMatrix[c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03"), c("ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03")]
+write.csv(ARC_Fst, "ARC_Fst_Neutral.csv")
+```
+
+### NEH
+```{r}
+##Using sync file with neutral for each population 
+neut_NEH_samples <- c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03")
+
+#update poolsizes to reflect 27 samples
+neut_NEHdstbn <- popsync2pooldata("NEH.total.neutral.input", poolsizes = c(20000,20000, 20000, 20000, 20000, 20000,40000, 40000, 40000, 
+                                                                          20000,20000, 20000, 20000, 20000, 20000,40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = neut_NEH_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+neut_NEHdstbn_SNPFst <- computeFST(neut_NEHdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+neut_NEHdstbn_Fst <- compute.pairwiseFST(neut_NEHdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+neut_NEHdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(neut_NEHdstbn_Fst@PairwiseFSTmatrix))
+
+NEH_Fst <- neut_NEHdstbn_PairwiseFSTMatrix[c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03"), c("NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+                     "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+                     "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03")]
+write.csv(NEH_Fst, "NEH_Fst_Neutral.csv")
+```
+
+### MV
+```{r}
+##Using sync file with neutral for each population 
+neut_MV_samples <- c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03")
+
+#update poolsizes to reflect 27 samples
+neut_MVdstbn <- popsync2pooldata("MV.total.neutral.input", poolsizes = c(40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000, 
+                                                                          40000, 40000, 40000, 40000,40000, 40000, 40000, 40000, 40000), 
+                                 poolnames = neut_MV_samples, min.rc = 1, min.cov.per.pool = 1, 
+                                 max.cov.per.pool = 50000, min.maf = 0.1, noindel = TRUE, nlines.per.readblock = 1000)
+
+#Compute Fst for every SNP
+neut_MVdstbn_SNPFst <- computeFST(neut_MVdstbn, method = "Anova")
+
+#Compute pairwise Fst matrix
+neut_MVdstbn_Fst <- compute.pairwiseFST(neut_MVdstbn, method = "Anova", min.cov.per.pool = 1, max.cov.per.pool = 50000, min.maf = 0.001, output.snp.values = FALSE)
+
+neut_MVdstbn_PairwiseFSTMatrix <- as.matrix(as.data.frame(neut_MVdstbn_Fst@PairwiseFSTmatrix))
+
+MV_Fst <- neut_MVdstbn_PairwiseFSTMatrix[c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03"), c("MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+                     "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+                     "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03")]
+write.csv(MV_Fst, "MV_Fst_Neutral.csv")
+```
+
+
+## Neutral Loci PCAs
+
+### ARC
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' ARC.neutral.only.sync | cut -f1,2 | sort | uniq > neutral.pca.filter.ARC
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' neutral.pca.filter.ARC ARC.dp25.cov.sync | cut --complement -f13- > ARC.neutral.pca.sync
 ```
 
 ```{r}
-png(filename="PC1.png", type="cairo",units="px", width=5400, height=3000, res=300, bg="transparent")
-ggplot(pca_df, aes(x=PC1, y= PC2, color = Treatments, fill=Treatments)) + geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+ theme_classic() + scale_fill_manual(values=cbPaletteSmall,name="Treatment")+ 
-guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24))+
+# Read sync file of significant neutral loci for neutral PCA
+ARC.input.all.neutral <- read.sync(file="ARC.neutral.pca.sync", gen=seq(1,9), repl=seq(1,9), polarization="rising")
+ARC.input.all.neutral.af <- af(ARC.input.all.neutral,gen=seq(1,9), repl=seq(1,9))
+
+ARC.labels <- c(
+  "ARC2_CB1","ARC2_CB2","ARC2_CB3","ARC2_SB1","ARC2_SB2","ARC2_SB3","ARC2_T01","ARC2_T02","ARC2_T03"
+)
+length(ARC.labels)  # should be 9
+
+pop.ids <- colnames(ARC.input.all.neutral.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = ARC.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^NEH",  meta$bio_label),  "NEH",
+                          ifelse(grepl("^MV", meta$bio_label), "MV", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(ARC.input.all.neutral.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.neutral.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(ARC.input.all.neutral.af) <- meta$bio_label
+```
+
+```{r}
+# Perform PCA
+af_t <- t(ARC.input.all.neutral.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.neutral.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+neutpca_arc <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(aes(alpha=0.2), size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
+    ) +
   labs(
     x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
     y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
-    title = "PCA of Allele Frequencies"
+    title = "PCA of Neutral Loci (ARC)"
   )
-dev.off()
-png(filename="PC1b.png", type="cairo",units="px", width=5400, height=3000, res=300, bg="transparent")
-ggplot(pca_df, aes(x=PC1, y= PC2, color = Population, fill=Population)) + geom_point(aes(alpha=0.2), size =10,shape=21, col="black")+ theme_classic() + scale_fill_manual(values=cbPaletteSmall,name="Spawn")+ 
-guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24))+
+
+ggsave(filename = "PCA/neutral_PCA_ARC.png", plot = neutpca_arc, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+### NEH
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' NEH.neutral.only.sync | cut -f1,2 | sort | uniq > neutral.pca.filter.NEH
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' neutral.pca.filter.NEH NEH.dp25.cov.sync | cut --complement -f31- > NEH.neutral.pca.sync
+```
+
+```{r}
+# Read sync file of significant neutral loci for neutral PCA
+NEH.input.all.neutral <- read.sync(file="NEH.neutral.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
+NEH.input.all.neutral.af <- af(NEH.input.all.neutral,gen=seq(1,27), repl=seq(1,27))
+
+NEH.labels <- c(
+  "NEH1_CB1","NEH1_CB2","NEH1_CB3","NEH1_SB1","NEH1_SB2","NEH1_SB3","NEH1_T01","NEH1_T02","NEH1_T03",
+  "NEH2_CB1","NEH2_CB2","NEH2_CB3","NEH2_SB1","NEH2_SB2","NEH2_SB3","NEH2_T01","NEH2_T02","NEH2_T03",
+  "NEH3_CB1","NEH3_CB2","NEH3_CB3","NEH3_SB1","NEH3_SB2","NEH3_SB3","NEH3_T01","NEH3_T02","NEH3_T03"
+)
+length(NEH.labels)  # should be 27
+
+pop.ids <- colnames(NEH.input.all.neutral.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = NEH.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^NEH",  meta$bio_label),  "NEH",
+                          ifelse(grepl("^MV", meta$bio_label), "MV", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(NEH.input.all.neutral.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.neutral.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(NEH.input.all.neutral.af) <- meta$bio_label
+```
+
+```{r}
+# Perform PCA
+af_t <- t(NEH.input.all.neutral.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.neutral.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+neutpca_neh <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(aes(alpha=0.2), size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+  annotate("text", x = -330, y = -40, label = "NEH1", color = "black", size = 5) +
+  annotate("text", x = 120, y = -250, label = "NEH2", color = "black", size = 5) +
+  annotate("text", x = 150, y = 170, label = "NEH3", color = "black", size = 5) +
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
+    ) +
   labs(
     x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
     y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
-    title = "PCA of Allele Frequencies"
+    title = "PCA of Neutral Loci (NEH)"
   )
-dev.off()
+neutpca_neh
+ggsave(filename = "PCA/neutral_PCA_NEH.png", plot = neutpca_neh, width = 6, height = 5, units = "in", dpi = 300)
 ```
 
 
-## MV
+### MV
+```{bash, eval = FALSE}
+# Activate the CASE conda environment
+source activate CADO
+
+mawk '!/CHR/' MV.neutral.only.sync | cut -f1,2 | sort | uniq > neutral.pca.filter.MV
+
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' neutral.pca.filter.MV MV.dp25.cov.sync | cut --complement -f31- > MV.neutral.pca.sync
+```
+
+```{r}
+# Read sync file of significant neutral loci for neutral PCA
+MV.input.all.neutral <- read.sync(file="MV.neutral.pca.sync", gen=seq(1,27), repl=seq(1,27), polarization="rising")
+MV.input.all.neutral.af <- af(MV.input.all.neutral,gen=seq(1,27), repl=seq(1,27))
+
+MV.labels <- c(
+  "MV1_CB1","MV1_CB2","MV1_CB3","MV1_SB1","MV1_SB2","MV1_SB3","MV1_T01","MV1_T02","MV1_T03",
+  "MV2_CB1","MV2_CB2","MV2_CB3","MV2_SB1","MV2_SB2","MV2_SB3","MV2_T01","MV2_T02","MV2_T03",
+  "MV3_CB1","MV3_CB2","MV3_CB3","MV3_SB1","MV3_SB2","MV3_SB3","MV3_T01","MV3_T02","MV3_T03"
+)
+length(MV.labels)  # should be 27
+
+pop.ids <- colnames(MV.input.all.neutral.af)  # "F1.R1.freq", ..., "F63.R63.freq"
+
+meta <- data.frame(
+  sample_id   = pop.ids,
+  bio_label   = MV.labels,
+  stringsAsFactors = FALSE
+)
+
+# Derive treatment from the biological label
+meta$treatment <- ifelse(grepl("_CB", meta$bio_label), "control",
+                  ifelse(grepl("_SB", meta$bio_label), "stress", "initial"))
+# can also parse by trial  
+meta$trial <- sub("_.*", "", meta$bio_label)
+# and parse by population
+meta$pop <- ifelse(grepl("^ARC", meta$bio_label), "ARC",
+                   ifelse(grepl("^NEH",  meta$bio_label),  "NEH",
+                          ifelse(grepl("^MV", meta$bio_label), "MV", NA)))
+View(meta)
+
+#check that column names in input.all.rand.af and sample_id column in meta table are the same
+all.equal(colnames(MV.input.all.neutral.af), meta$sample_id)
+# should be TRUE
+
+# assign the columns of input.all.neutral.af with their proper sample names instead of the sample_id created by inputting the table to poolseq
+colnames(MV.input.all.neutral.af) <- meta$bio_label
+```
+
+```{r}
+# Perform PCA
+af_t <- t(MV.input.all.neutral.af)
+
+# Run PCA on transposed allele frequency matrix (samples as rows, loci as columns)
+pca_res <- prcomp(af_t, center = TRUE, scale. = TRUE)
+
+# Get scores for plotting
+pca_df <- as.data.frame(pca_res$x)
+#pca_df$locus <- rownames(input.all.neutral.af)  # keep locus IDs if you have them
+
+# Calculate percent variance explained by each PC
+var_explained <- pca_res$sdev^2 / sum(pca_res$sdev^2) * 100
+
+pca_df$Treatment <- meta$treatment
+pca_df$Trial <- meta$trial
+
+neutpca_mv <- ggplot(pca_df, aes(x = PC1, y = PC2, color = Treatment, fill=Treatment)) +
+  geom_point(aes(alpha=0.2), size =7,shape=21, col="black")+  
+  scale_fill_manual(values=treatPalette,name="Treatment")+ 
+  annotate("text", x = -180, y = 280, label = "MV1", color = "black", size = 5) +
+  annotate("text", x = -200, y = -250, label = "MV2", color = "black", size = 5) +
+  annotate("text", x = 500, y = 50, label = "MV3", color = "black", size = 5) +
+guides(alpha=FALSE) +theme(axis.title.x = element_text(size = 24),axis.title.y = element_text(size = 24)) +
+  theme_minimal() +
+  theme(
+    panel.grid.minor = element_blank(),
+    panel.grid.major.x = element_blank(),
+    panel.grid.major.y = element_blank(),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 1)
+    ) +
+  labs(
+    x = paste0("PC1 (", round(var_explained[1], 1), "%)"),
+    y = paste0("PC2 (", round(var_explained[2], 1), "%)"),
+    title = "PCA of Neutral Loci (MV)"
+  )
+neutpca_mv
+ggsave(filename = "PCA/neutral_PCA_MV.png", plot = neutpca_mv, width = 6, height = 5, units = "in", dpi = 300)
+```
+
+### Neutral PCA Composite Figure
+```{r}
+neutpca_design <- "AAABBBCCC"
+
+allpop_neutpca <- (neutpca_arc + neutpca_neh + neutpca_mv) +
+  plot_layout(design = neutpca_design, guides = "collect") +
+  plot_annotation(tag_levels = "a", tag_suffix = ")") 
+print(allpop_neutpca)
+
+# Export to PNG at a specific size
+ggsave("PCA/neutral_pca_allpopcomposite.png", plot = allpop_neutpca, width = 15, height =5, units = "in", dpi = 300)
+```

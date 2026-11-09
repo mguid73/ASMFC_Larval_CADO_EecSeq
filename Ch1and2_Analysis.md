@@ -1,4 +1,5 @@
 # Larval CADO and Vibrio Genomic Analysis (CH 1 & 2)
+## Dissertation Analysis
 
 Author: Megan Delatte-Guidry
 
@@ -432,6 +433,13 @@ bcftools view -S <(grep -E '^MV' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcf
 # filter and pull positions of CHAPTER 2 variants from vcf
 bcftools view -S <(grep -E '^(VC|VS|CC|CS|CON|STR)' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > Chapter2.pos
 
+# filter and pull positions of CHATPER 2 **Vibrio_Probed** variants from vcf
+bcftools view -S <(grep -E 'Vibrio' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > VibrioProbe.pos
+
+# filter and pull positions of CHATPER 2 **Combined_Probed** variants from vcf
+bcftools view -S <(grep -E 'Combined' samples) CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz | bcftools view -i 'F_MISSING<0.1'  | bcftools view -M 4 -m 2 | bcftools +fill-tags -- -t 'AAF:1=sum(FORMAT/AO)/sum(FORMAT/DP)' | bcftools +fill-tags -- -t  FORMAT/VAF | bcftools view --threads 40 -i 'AAF > 0.015 && AAF < 0.985' | bcftools query -f '%CHROM\t%POS\n' > CombinedProbe.pos
+
+
 # check length
 cat Chapter2.pos | wc -l
 # output: 475478
@@ -453,6 +461,21 @@ wc -l ARC.pos NEH.pos MV.pos Chapter1.pos Chapter2.pos fil.pos
 
 # output filtered vcf - this takes a bit to run (1hr)
 bcftools view -R fil.pos --threads 40 -m2 -M 4 CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz -O z -o SNP.CADO.TRSdp.20.B90.2a.perp.bypop.vcf.gz
+
+### used the above vcf for **Chapter 1**
+```
+
+### Chapter 2 vcf - filtered vcf with Vibrio and Combined probe sets filtered separately 
+```{bash}
+
+#read pos files, sorts lines, and uniq removes the duplicated lines while retaining all of the sites from each chapter position file
+cat CombinedProbe.pos VibrioProbe.pos Chapter2.pos | sort | uniq > ch2.fil.pos
+
+#check out number of sites retained in each position file
+wc -l CombinedProbe.pos VibrioProbe.pos Chapter2.pos ch2.fil.pos
+
+# output filtered vcf - this takes a bit to run (1hr)
+bcftools view -R ch2.fil.pos --threads 40 -m2 -M 4 CADO.TRSdp.20.g5.nDNA.FIL.vcf.gz -O z -o Ch2.SNP.CADO.TRSdp.20.B90.2a.perp.byprobe.vcf.gz
 ```
 
 
@@ -470,10 +493,11 @@ source activate CADO
 > the filtered variant call file (VCF) I have here are loci that have 4 alleles or less (despite the file name)
 > These can be a mixture of SNP, InDels, and complex mutations. 
 
-### Create Sync files
+### Chapter 1 sync file conversion
 ```{bash, eval=FALSE}
 source activate CADO
 
+# CHAPTER 1 
 #problem code - because the literal string did not match the missing data string from FreeBayes what was in my vcf  
 #bcftools view --threads 40 ../raw.vcf/SNP.CADO.TRSdp.20.B90.2a.perp.vcf.gz  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i==".:.:.:.:.:.:.:.") $i="."; print }' > temp.vcf
 
@@ -488,7 +512,22 @@ python2 ../../Scripts/VCFtoPopPool.py temp.vcf Larval.BothChapters.sync
 ```
 
 
-### This sort is to maintain reproducibility across older analysis
+### Chapter 2 sync file conversion 
+```{bash, eval=FALSE}
+# CHAPTER 2
+
+# changing missing genotype coding with regex instead of literal string recogniztion - this should be more fool proof (thanks to Jon for catching & fixing this!!)
+bcftools view --threads 40 ../raw.vcf/Ch2.SNP.CADO.TRSdp.20.B90.2a.perp.byprobe.vcf.gz \
+  | mawk -F'\t' -v OFS='\t' '{ for(i=1;i<=NF;i++) if($i ~ /^(\.:)*\.$/) $i="."; print }' > temp2.vcf
+
+# convert to sync file
+python2 ../../Scripts/VCFtoPopPool.py temp2.vcf Larval.Chapter2.sync 
+
+#rm temp2.vcf
+```
+
+
+### Chapter 1 - This sort is to maintain reproducibility across older analysis
 ```{bash}
 mawk 'BEGIN {OFS="\t"
     order["CHROM"] = 0
@@ -508,17 +547,40 @@ mawk 'BEGIN {OFS="\t"
 mv test.sync Larval.BothChapters.sync 
 ```
 
+### Chapter 2 - This sort is to maintain reproducibility across older analysis
+```{bash}
+mawk 'BEGIN {OFS="\t"
+    order["CHROM"] = 0
+    order["NC_035789.1"] = 1
+    order["NC_035780.1"] = 2
+    order["NC_035781.1"] = 3
+    order["NC_035782.1"] = 4
+    order["NC_035783.1"] = 5
+    order["NC_035784.1"] = 6
+    order["NC_035785.1"] = 7
+    order["NC_035786.1"] = 8
+    order["NC_035787.1"] = 9
+    order["NC_035788.1"] = 10
+}
+{ print order[$1], $2, NR, $0 }' Larval.Chapter2.sync  | sort -k1,1n -k2,2n -k3,3n | cut -f4- > test2.sync
+
+mv test2.sync Larval.Chapter2.sync 
+```
+
 ## Split sync files by CHAPTER with positional lookup***
 ```{bash}
-cat <(echo -e "CHROM\tPOS") Chapter1.pos > Ch1.head.pos
-cat <(echo -e "CHROM\tPOS") ARC.pos > ARC.head.pos
-cat <(echo -e "CHROM\tPOS") NEH.pos > NEH.head.pos
-cat <(echo -e "CHROM\tPOS") MV.pos > MV.head.pos
+# done and commented out just for visual cue  
+#cat <(echo -e "CHROM\tPOS") Chapter1.pos > Ch1.head.pos
+#cat <(echo -e "CHROM\tPOS") ARC.pos > ARC.head.pos
+#cat <(echo -e "CHROM\tPOS") NEH.pos > NEH.head.pos
+#cat <(echo -e "CHROM\tPOS") MV.pos > MV.head.pos
 
-cat <(echo -e "CHROM\tPOS") Chapter2.pos > Ch2.head.pos
+#cat <(echo -e "CHROM\tPOS") Chapter2.pos > Ch2.head.pos
+#cat <(echo -e "CHROM\tPOS") VibrioProbe.pos > VibrioProbe.head.pos
+#cat <(echo -e "CHROM\tPOS") CombinedProbe.pos > CombinedProbe.head.pos
 
 # Chapter 1: all populations 
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.BothChapters.sync \
+#mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.BothChapters.sync \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(ARC|NEH|MV)/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
@@ -526,42 +588,53 @@ mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch1.head.pos Larval.BothChapters.syn
 
 
 # Chapter 1 ARC population - use ARC.head.pos
-
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' ARC.head.pos Larval.BothChapters.sync \
+#mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' ARC.head.pos Larval.BothChapters.sync \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^ARC/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
   > ARC.Larval.sync
 
 # Chapter 1 NEH population - use NEH.head.pos
-
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' NEH.head.pos Larval.BothChapters.sync \
+#mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' NEH.head.pos Larval.BothChapters.sync \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^NEH/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
   > NEH.Larval.sync
 
 # Chapter 1 MV population - use MV.head.pos
-
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' MV.head.pos Larval.BothChapters.sync \
+#mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' MV.head.pos Larval.BothChapters.sync \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^MV/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
   > MV.Larval.sync
 
 
-# Chapter 2: VC, VS, CC, CS, CON, STR populations - with positional look up ***
-mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch2.head.pos Larval.BothChapters.sync  \
+# Chapter 2: VC, VS, CC, CS, CON, STR  - with positional look up *** - this actually pulled everything bc it was a ch2 only sync file, un-needed step but okay
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' Ch2.head.pos Larval.Chapter2.sync  \
   | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/^(VC|VS|CC|CS|CON|STR)/)k[i]}
           {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
   | mawk '!/\t\.\t/' \
-  > Chapter2.Larval.sync
+  > Chapter2.Larval.byprobe.sync
+
+# Chapter 2: Vibrio Probe set - with positional look up ***
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' VibrioProbe.head.pos Larval.Chapter2.sync  \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/Vibrio/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > VibrioProbed.Larval.sync
+
+# Chapter 2: Combined Probe set - with positional look up ***
+mawk 'NR==FNR{a[$1,$2]; next} ($1,$2) in a' CombinedProbe.head.pos Larval.Chapter2.sync  \
+  | mawk 'NR==1{for(i=1;i<=NF;i++)if(i<=3||$i~/Combined/)k[i]}
+          {o="";for(i=1;i<=NF;i++)if(i in k)o=o?o OFS $i:$i;print o}' OFS='\t' \
+  | mawk '!/\t\.\t/' \
+  > CombinedProbed.Larval.sync
 
 
 # Count samples per file (subtract 3 for CHROM, POS, REF)
 head -1 Chapter1.Larval.sync | tr '\t' '\n' | wc -l  
 # output = 66 -3 = 63 samples = 9 samples/exp * 7 exp = 63 samples (looks good!)
-head -1 Chapter2.Larval.sync | tr '\t' '\n' | wc -l
+head -1 Chapter2.Larval.byprobe.sync | tr '\t' '\n' | wc -l
 # output = 31 - 3 = 28 samples = 14 samples/probeset * 2 probesets = 28 (looks good!)
 head -1 Larval.BothChapters.sync| tr '\t' '\n' | wc -l
 # output = 94 -3 = 91 samples 
@@ -569,7 +642,7 @@ head -1 Larval.BothChapters.sync| tr '\t' '\n' | wc -l
 
 #check out column names for each sync file
 head -1 Chapter1.Larval.sync | tr '\t' '\n'
-head -1 Chapter2.Larval.sync | tr '\t' '\n'
+head -1 Chapter2.Larval.byprobe.sync | tr '\t' '\n'
 ```
 
 ## CHAPTER 1 - Add coverage stats to sync file and filter by minimum and mean coverage
@@ -673,7 +746,7 @@ Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth
 source activate CADO
 
 # add coverage stats to each sync file and check those out to decide on depth limits
-mawk -f ../../Scripts/add_cov_sync.txt Chapter2.Larval.sync > Ch2.cov.sync
+mawk -f ../../Scripts/add_cov_sync.txt Chapter2.Larval.byprobe.sync > Ch2.cov.sync
 mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' Ch2.cov.sync > Ch2.coverage_stats.txt
 
 #check column index numbers
@@ -692,6 +765,53 @@ cat Ch2.dp25.cov.sync | wc -l
 ```
 Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (1,953 snps removed).
 
+## CHAPTER 2 **Vibrio Probe** - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt VibrioProbed.Larval.sync > VibrioProbed.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' VibrioProbed.cov.sync > VibrioProbed.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' VibrioProbed.cov.sync
+# 18 MIN_COV
+# 19 MAX_COV
+# 20 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$18 > 9 && $20 > 24' VibrioProbed.cov.sync > VibrioProbed.dp25.cov.sync
+
+cat VibrioProbed.cov.sync | wc -l 
+# 618,056
+cat VibrioProbed.dp25.cov.sync | wc -l 
+# 615,906
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (2150 snps removed).
+
+## CHAPTER 2 **Combined Probe** - Add coverage stats to sync file and filter by minimum and mean coverage
+```{bash, eval=FALSE}
+source activate CADO
+
+# add coverage stats to each sync file and check those out to decide on depth limits
+mawk -f ../../Scripts/add_cov_sync.txt CombinedProbed.Larval.sync > CombinedProbed.cov.sync
+mawk '{print $1, $2, $(NF-2), $(NF-1), $NF}' OFS='\t' CombinedProbed.cov.sync > CombinedProbed.coverage_stats.txt
+
+#check column index numbers
+mawk 'NR==1 { for(i=1; i<=NF; i++) print i, $i }' CombinedProbed.cov.sync
+# 18 MIN_COV
+# 19 MAX_COV
+# 20 MEAN_COV
+
+# filter the sync file for specific coverage stats (be sure to update column numbers - they correspond to min and mean coverage)
+mawk '$18 > 9 && $20 > 24' CombinedProbed.cov.sync > CombinedProbed.dp25.cov.sync
+
+cat CombinedProbed.cov.sync | wc -l 
+# 545043
+cat CombinedProbed.dp25.cov.sync | wc -l 
+# 542869
+```
+Here I only kept SNPs that had a minimum depth of 10 or greater and a mean depth of 25 or greater (2174 snps removed).
 
 could also filter coverage for the combined chapter 1 & 2 sync file, but I didn't need to
 ```{bash, eval=FALSE}
@@ -704,8 +824,6 @@ could also filter coverage for the combined chapter 1 & 2 sync file, but I didn'
 `Ch1.dp25.cov.sync` & population sync files copied into 1_Larval-CADO Analysis directory
 
 ### Chapter 2 filtered sync file
-`Ch2.dp25.cov.sync` copied into 2_Vibrio-Challenge Analysis directory
+`Ch2.dp25.cov.sync` & probe set sync files copied into 2_Vibrio-Challenge Analysis directory
 
-
-See ____.Rmd
 _________________________________________________________
